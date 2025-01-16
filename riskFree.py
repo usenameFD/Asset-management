@@ -43,6 +43,7 @@ class RiskFree:
         # Convert both columns to numeric, coercing errors to NaN
         yield_fr["maturity"] = pd.to_numeric(yield_fr["maturity"], errors="coerce")
         yield_fr["taux_zc"] = pd.to_numeric(yield_fr["taux_zc"], errors="coerce")
+        yield_fr["taux_zc"] = yield_fr["taux_zc"] / 100 # Taking back to a 0 to 1 rate
 
         self.riskFree_fr = yield_fr
 
@@ -74,6 +75,7 @@ class RiskFree:
         yield_usa = yields_usa.iloc[-1]  # Most recent rates
         yield_usa = pd.DataFrame(yield_usa).reset_index()
         yield_usa.columns = ["maturity", "taux_zc"]
+        yield_usa["taux_zc"] = yield_usa["taux_zc"] / 100 # Taking back to a 0 to 1 rate
 
         self.riskFree_usa = yield_usa
 
@@ -114,7 +116,7 @@ class RiskFree:
         yields = self.riskFree_rate(target_maturities)
 
         plt.figure(figsize=(10, 6))
-        plt.plot(target_maturities, yields, label=f"Yield Curve ({self.country.upper()})")
+        plt.plot(target_maturities, 100 * yields, label=f"Yield Curve ({self.country.upper()})")
         plt.xlabel("Maturity (Years)")
         plt.ylabel("Yield (%)")
         plt.title(f"Zero-Coupon Yield Curve for {self.country.upper()}")
