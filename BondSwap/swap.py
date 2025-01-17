@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Union
 
-from riskFree import*
+from BondSwap.riskFree import*
 
 class Swap:
     def __init__(self) -> None:

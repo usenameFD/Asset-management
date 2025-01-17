@@ -5,11 +5,12 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
 
-from riskFree import *
-from bond import Bond
-from swap import Swap
+from BondSwap.riskFree import *
+from BondSwap.bond import Bond
+from BondSwap.swap import Swap
 
 api_key='99b15e0a2f3b3f4571893e831fd555d0'
+date = '31-decembre-2023'
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -98,7 +99,7 @@ def calculate_bond(n_clicks, country, face_value, coupon_rate, maturity, freq):
         bond.get_country(country)
         rf = RiskFree()
         rf.get_country(country)
-        rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr()
+        rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr(date)
         bond.get_riskFree_rate(rf)
         
         # Calculate Bond Price
@@ -139,7 +140,7 @@ def calculate_swap(n_clicks, country, notional, rate, times):
         swap.get_country(country)
         rf = RiskFree()
         rf.get_country(country)
-        rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr()
+        rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr(date)
         swap.get_riskFree_rate(rf)
 
         # Convert times to a list of floats
@@ -173,7 +174,7 @@ def plot_zero_coupon_rate_curve(country):
     # Create a RiskFree object to fetch the zero-coupon rates
     rf = RiskFree()
     rf.get_country(country)
-    rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr()
+    rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr(date)
 
     # Simulate maturities and calculate zero-coupon rates
     maturities = np.arange(0.5, 30.5, 0.5)  # Maturities from 0.5 to 30 years
