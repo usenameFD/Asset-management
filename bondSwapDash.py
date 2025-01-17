@@ -1,6 +1,5 @@
 import dash
-from dash import dcc
-from dash import html
+from dash import dcc, html
 from dash import Input, Output
 import numpy as np
 import pandas as pd
@@ -10,61 +9,74 @@ from riskFree import *
 from bond import Bond
 from swap import Swap
 
+api_key='99b15e0a2f3b3f4571893e831fd555d0'
+
 # Initialize the Dash app
 app = dash.Dash(__name__)
 
-# Create a layout for the app
-app.layout = html.Div([
-    html.H1("Bond and Swap Pricing Tool with Interactive Visuals"),
+# Add custom styles
+app.layout = html.Div(style={'fontFamily': 'Arial, sans-serif', 'backgroundColor': '#f4f7f6'}, children=[
+    html.Div([
+        html.H1("Bond and Swap Pricing Tool", style={'textAlign': 'center', 'color': '#2c3e50'}),
+        html.P("Interactive tool to visualize bond prices, swap values, and zero-coupon rates", style={'textAlign': 'center', 'color': '#7f8c8d', 'fontSize': '18px'}),
+    ]),
 
     # Bond Input Section
     html.Div([
-        html.H2("Bond Pricing"),
-        html.Label("Country:"),
-        dcc.Dropdown(
-            id="bond-country",
-            options=[{'label': 'USA', 'value': 'usa'}, {'label': 'France', 'value': 'fr'}],
-            value='usa'
-        ),
-        html.Label("Face Value:"),
-        dcc.Input(id="bond-face-value", type="number", value=1000),
-        html.Label("Coupon Rate (Annual):"),
-        dcc.Input(id="bond-coupon-rate", type="number", value=0.05),
-        html.Label("Maturity (Years):"),
-        dcc.Input(id="bond-maturity", type="number", value=5),
-        html.Label("Coupon Frequency (Years):"),
-        dcc.Input(id="bond-freq", type="number", value=0.5),
-        html.Button('Calculate Bond Price', id='calculate-bond', n_clicks=0),
-        html.Div(id="bond-price"),
+        html.Div([
+            html.H2("Bond Pricing", style={'color': '#2c3e50'}),
+            html.Label("Country:"),
+            dcc.Dropdown(
+                id="bond-country",
+                options=[{'label': 'USA', 'value': 'usa'}, {'label': 'France', 'value': 'fr'}],
+                value='usa',
+                style={'width': '100%', 'padding': '10px'}
+            ),
+            html.Label("Face Value:"),
+            dcc.Input(id="bond-face-value", type="number", value=1000, style={'width': '100%', 'padding': '10px'}),
+            html.Label("Coupon Rate (Annual):"),
+            dcc.Input(id="bond-coupon-rate", type="number", value=0.05, style={'width': '100%', 'padding': '10px'}),
+            html.Label("Maturity (Years):"),
+            dcc.Input(id="bond-maturity", type="number", value=5, style={'width': '100%', 'padding': '10px'}),
+            html.Label("Coupon Frequency (Years):"),
+            dcc.Input(id="bond-freq", type="number", value=0.5, style={'width': '100%', 'padding': '10px'}),
+            html.Button('Calculate Bond Price', id='calculate-bond', n_clicks=0, style={'width': '100%', 'padding': '10px', 'backgroundColor': '#3498db', 'color': 'white', 'border': 'none'}),
+            html.Div(id="bond-price", style={'fontSize': '20px', 'fontWeight': 'bold', 'textAlign': 'center', 'marginTop': '20px'}),
+        ], style={'backgroundColor': 'white', 'borderRadius': '10px', 'padding': '20px', 'boxShadow': '0px 4px 6px rgba(0, 0, 0, 0.1)', 'margin': '20px'}),
 
         # Bond Price vs Maturity Chart
-        dcc.Graph(id="bond-price-maturity")
-    ]),
+        dcc.Graph(id="bond-price-maturity", style={'height': '400px'})
+    ], style={'display': 'flex', 'flexWrap': 'wrap', 'justifyContent': 'space-between'}),
 
     # Swap Input Section
     html.Div([
-        html.H2("Interest Rate Swap Pricing"),
-        html.Label("Country:"),
-        dcc.Dropdown(
-            id="swap-country",
-            options=[{'label': 'USA', 'value': 'usa'}, {'label': 'France', 'value': 'fr'}],
-            value='usa'
-        ),
-        html.Label("Notional Amount:"),
-        dcc.Input(id="swap-notional", type="number", value=1000000),
-        html.Label("Swap Rate (K):"),
-        dcc.Input(id="swap-rate", type="number", value=0.02),
-        html.Label("Payment Times (Years, comma-separated):"),
-        dcc.Input(id="swap-times", type="text", value="1,2,3,4,5"),
-        html.Button('Calculate Swap Value', id='calculate-swap', n_clicks=0),
-        html.Div(id="swap-value"),
+        html.Div([
+            html.H2("Interest Rate Swap Pricing", style={'color': '#2c3e50'}),
+            html.Label("Country:"),
+            dcc.Dropdown(
+                id="swap-country",
+                options=[{'label': 'USA', 'value': 'usa'}, {'label': 'France', 'value': 'fr'}],
+                value='usa',
+                style={'width': '100%', 'padding': '10px'}
+            ),
+            html.Label("Notional Amount:"),
+            dcc.Input(id="swap-notional", type="number", value=1000000, style={'width': '100%', 'padding': '10px'}),
+            html.Label("Swap Rate (K):"),
+            dcc.Input(id="swap-rate", type="number", value=0.02, style={'width': '100%', 'padding': '10px'}),
+            html.Label("Payment Times (Years, comma-separated):"),
+            dcc.Input(id="swap-times", type="text", value="1,2,3,4,5", style={'width': '100%', 'padding': '10px'}),
+            html.Button('Calculate Swap Value', id='calculate-swap', n_clicks=0, style={'width': '100%', 'padding': '10px', 'backgroundColor': '#e67e22', 'color': 'white', 'border': 'none'}),
+            html.Div(id="swap-value", style={'fontSize': '20px', 'fontWeight': 'bold', 'textAlign': 'center', 'marginTop': '20px'}),
+        ], style={'backgroundColor': 'white', 'borderRadius': '10px', 'padding': '20px', 'boxShadow': '0px 4px 6px rgba(0, 0, 0, 0.1)', 'margin': '20px'}),
 
         # Swap Value vs Swap Rate Chart
-        dcc.Graph(id="swap-rate-chart")
-    ]),
+        dcc.Graph(id="swap-rate-chart", style={'height': '400px'})
+    ], style={'display': 'flex', 'flexWrap': 'wrap', 'justifyContent': 'space-between'}),
 
     # Zero-Coupon Rates Curve Chart
-    dcc.Graph(id="zero-coupon-rate-curve")
+    html.Div([
+        dcc.Graph(id="zero-coupon-rate-curve", style={'height': '400px', 'marginTop': '20px'})
+    ], style={'marginTop': '40px'})
 ])
 
 
@@ -86,7 +98,7 @@ def calculate_bond(n_clicks, country, face_value, coupon_rate, maturity, freq):
         bond.get_country(country)
         rf = RiskFree()
         rf.get_country(country)
-        rf.get_riskFree_usa(api_key='99b15e0a2f3b3f4571893e831fd555d0') if country == 'usa' else rf.get_riskFree_fr()
+        rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr()
         bond.get_riskFree_rate(rf)
         
         # Calculate Bond Price
@@ -97,11 +109,12 @@ def calculate_bond(n_clicks, country, face_value, coupon_rate, maturity, freq):
         prices = [bond.get_price(face_value, coupon_rate, m, freq) for m in maturities]
 
         bond_price_maturity = {
-            'data': [go.Scatter(x=maturities, y=prices, mode='lines', name='Bond Price')],
+            'data': [go.Scatter(x=maturities, y=prices, mode='lines', name='Bond Price', line={'color': '#3498db'})],
             'layout': go.Layout(
                 title="Bond Price vs Maturity",
-                xaxis={'title': 'Maturity (Years)'},
-                yaxis={'title': 'Bond Price'}
+                xaxis={'title': 'Maturity (Years)', 'showgrid': False, 'zeroline': False},
+                yaxis={'title': 'Bond Price', 'showgrid': False, 'zeroline': False},
+                plot_bgcolor='#ecf0f1'
             )
         }
 
@@ -126,7 +139,7 @@ def calculate_swap(n_clicks, country, notional, rate, times):
         swap.get_country(country)
         rf = RiskFree()
         rf.get_country(country)
-        rf.get_riskFree_usa(api_key='99b15e0a2f3b3f4571893e831fd555d0') if country == 'usa' else rf.get_riskFree_fr()
+        rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr()
         swap.get_riskFree_rate(rf)
 
         # Convert times to a list of floats
@@ -138,11 +151,12 @@ def calculate_swap(n_clicks, country, notional, rate, times):
         swap_values = [swap.swap(0, T, notional, r) for r in rates]
 
         swap_rate_chart = {
-            'data': [go.Scatter(x=rates, y=swap_values, mode='lines', name='Swap Value')],
+            'data': [go.Scatter(x=rates, y=swap_values, mode='lines', name='Swap Value', line={'color': '#e67e22'})],
             'layout': go.Layout(
                 title="Swap Value vs Swap Rate",
-                xaxis={'title': 'Swap Rate (K)'},
-                yaxis={'title': 'Swap Value'}
+                xaxis={'title': 'Swap Rate (K)', 'showgrid': False, 'zeroline': False},
+                yaxis={'title': 'Swap Value', 'showgrid': False, 'zeroline': False},
+                plot_bgcolor='#ecf0f1'
             )
         }
 
@@ -159,7 +173,7 @@ def plot_zero_coupon_rate_curve(country):
     # Create a RiskFree object to fetch the zero-coupon rates
     rf = RiskFree()
     rf.get_country(country)
-    rf.get_riskFree_usa(api_key='99b15e0a2f3b3f4571893e831fd555d0') if country == 'usa' else rf.get_riskFree_fr()
+    rf.get_riskFree_usa(api_key) if country == 'usa' else rf.get_riskFree_fr()
 
     # Simulate maturities and calculate zero-coupon rates
     maturities = np.arange(0.5, 30.5, 0.5)  # Maturities from 0.5 to 30 years
@@ -167,11 +181,12 @@ def plot_zero_coupon_rate_curve(country):
 
     # Generate Zero-Coupon Rate Curve
     zero_coupon_curve = {
-        'data': [go.Scatter(x=maturities, y=zero_coupon_rates, mode='lines', name='Zero-Coupon Rate')],
+        'data': [go.Scatter(x=maturities, y=zero_coupon_rates, mode='lines', name='Zero-Coupon Rate', line={'color': '#2ecc71'})],
         'layout': go.Layout(
             title="Zero-Coupon Rate Curve",
-            xaxis={'title': 'Maturity (Years)'},
-            yaxis={'title': 'Zero-Coupon Rate (%)'}
+            xaxis={'title': 'Maturity (Years)', 'showgrid': False, 'zeroline': False},
+            yaxis={'title': 'Zero-Coupon Rate (%)', 'showgrid': False, 'zeroline': False},
+            plot_bgcolor='#ecf0f1'
         )
     }
 
