@@ -4,41 +4,54 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from riskFree import*
-import math
+from typing import Optional
+
 
 
 class Bond:
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the Bond class with default parameters.
         """
-        self.country = None
-        self.coupon = None
-        self.freq = None
-        self.face_value = None
-        self.riskFree_rate = None
-        self.price = None
-        self.maturity = None
+        self.country: Optional[str] = None
+        self.coupon: Optional[float] = None
+        self.freq: Optional[float] = None
+        self.face_value: Optional[float] = None
+        self.riskFree_rate: Optional[callable] = None
+        self.price: Optional[float] = None
+        self.maturity: Optional[float] = None
 
-    def get_country(self, country):
+    def get_country(self, country: str) -> None:
         """
-        Set the country for bond pricing and initialize the RiskFree object.
+        Set the country for bond pricing.
 
         Args:
             country (str): The country ("usa" or "fr").
-            api_key (str): The API key for fetching USA risk-free rates (if applicable).
         """
+        if country.lower() not in ["usa", "fr"]:
+            raise ValueError("Unsupported country. Use 'usa' or 'fr'.")
         self.country = country.lower()
-    
-    def get_riskFree_rate(self, riskFree):
-        
-        if riskFree.country == self.country:
-            self.riskFree_rate = riskFree.riskFree_rate
-        else:
-            raise ValueError("Counties do not match. Try 'fr' for France or 'usa' for United States.")
 
+    def get_riskFree_rate(self, riskFree: object) -> None:
+        """
+        Set the risk-free rate function based on the given RiskFree object.
 
-    def get_price(self, face_value, coupon_rate, maturity, freq=0.5):
+        Args:
+            riskFree (RiskFree): An instance of the RiskFree class.
+        """
+        if self.country != riskFree.country:
+            raise ValueError(
+                f"Mismatch between bond country ({self.country}) and risk-free rate country ({riskFree.country})."
+            )
+        self.riskFree_rate = riskFree.riskFree_rate
+
+    def get_price(
+        self,
+        face_value: float,
+        coupon_rate: float,
+        maturity: float,
+        freq: float = 0.5,
+    ) -> float:
         """
         Calculate the price of a bond using zero-coupon rates.
 
@@ -51,8 +64,17 @@ class Bond:
         Returns:
             float: The calculated price of the bond.
         """
-        if not self.riskFree_rate:
+        if self.riskFree_rate is None:
             raise ValueError("Risk-free rates are not initialized. Call get_country and get_riskFree_rate first.")
+
+        if face_value <= 0:
+            raise ValueError("Face value must be greater than 0.")
+        if coupon_rate < 0:
+            raise ValueError("Coupon rate cannot be negative.")
+        if maturity <= 0:
+            raise ValueError("Maturity must be greater than 0.")
+        if freq <= 0:
+            raise ValueError("Frequency must be greater than 0.")
 
         # Generate target maturities using numpy
         target_maturities = np.arange(freq, maturity + freq, freq)
