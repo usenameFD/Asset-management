@@ -131,4 +131,5 @@ class RiskFree:
         plt.title(f"Zero-Coupon Yield Curve for {self.country.upper()}")
         plt.grid(True)
         plt.legend()
+
         plt.show()
