@@ -49,10 +49,10 @@ def options_page():
     Output('greeks-output', 'children'),
     [Input('calculate-greeks-button', 'n_clicks')],
     [State('strike-price', 'value'),
-     State('underlying-price', 'value'),
-     State('interest-rate', 'value'),
-     State('days-to-expiry', 'value'),
-     State('volatility', 'value')]
+    State('underlying-price', 'value'),
+    State('interest-rate', 'value'),
+    State('days-to-expiry', 'value'),
+    State('volatility', 'value')]
 )
 def calculate_greeks(n_clicks, strike, underlying, interest_rate, days_to_expiry, volatility):
     if n_clicks is None:
