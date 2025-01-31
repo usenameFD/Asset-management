@@ -9,4 +9,4 @@ Cette dernière classe se sert des différents fichiers présents dans le dossie
 - Pour le projet 2 : il faut lancer le fichier "main_options.ipynb". 
 Ce fichier est un notebook utilisant les classes et méthodes définies dans le dossier 'Options'. 
 
--Enfin, le projet 3 se trouve dans le notebook "gestion_active_dash.ipynb"
+- Enfin, le projet 3 se trouve dans le notebook "gestion_active_dash.ipynb"
