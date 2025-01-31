@@ -214,30 +214,3 @@ class BarrierOption:
         plt.grid()
         plt.tight_layout()
         plt.show()
-
-
-# Créer une instance de BarrierOption
-option = BarrierOption()
-
-
-# Paramètres de l'option
-S0 = 190  # Prix initial
-K = 250  # Strike
-T = 1  # Maturité en années
-r = 0.05  # Taux sans risque
-sigma = 0.2  # Volatilité
-n_simulations = 10000
-n_steps = 250
-barrier = 300  # Niveau de la barrière
-option_type = 'call'  # Option Call
-barrier_type = 'up-and-out'  # Barrière up-and-out
-
-# Calculer le prix de l'option
-option_price = option.price_barrier_option(S0, K, T, r, sigma, n_simulations, n_steps, barrier, option_type, barrier_type)
-print(f"Prix de l'option : {option_price:.4f}")
-
-# Afficher les trajectoires
-option.plot_trajectories(S0, K, T, r, sigma, n_simulations, n_steps, barrier, option_type, barrier_type)
-
-# Afficher la densité et les probabilités
-option.plot_density_and_probabilities(S0, K, T, r, sigma, n_simulations, n_steps, barrier, option_type, barrier_type)
