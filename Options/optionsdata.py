@@ -160,24 +160,22 @@ class OptionsData:
 
         plt.show()
 
-    def sigma_sim(self, T: float, K: float) -> tuple:
+    def sigma_sim(self, T: float, K: float) -> float:
         """
-        Simulate implied volatility for a given maturity and strike.
+        Get the implied volatility for a given maturity and strike.
 
         Args:
             T (float): Time to maturity in years.
             K (float): Strike price.
 
         Returns:
-            tuple: (implied volatility, current stock price)
+            float: Implied volatility for the given maturity and strike.
         """
         if self.implied_volatility is None:
             raise ValueError("Implied volatility data not processed. Call process_data() first.")
 
         df = self.implied_volatility.dropna(subset=["implied_volatility"])
         df = df[df["maturity"] > (20 / 365)]  # Exclude short maturities
-
-        stock_today = yf.Ticker(self.ticker).history(period="1d")["Close"].iloc[-1]
 
         sigma = griddata(
             (df["maturity"], df["strike"]),
@@ -186,4 +184,14 @@ class OptionsData:
             method="linear",
         )
 
-        return sigma, stock_today
+        return sigma
+
+    def get_stock_price(self) -> float:
+        """
+        Get the current stock price.
+
+        Returns:
+            float: Current stock price.
+        """
+        stock_today = yf.Ticker(self.ticker).history(period="1d")["Close"].iloc[-1]
+        return stock_today

@@ -111,3 +111,4 @@ class AsianOption:
         plt.legend()
         plt.grid()
         plt.show()
+
