@@ -116,14 +116,23 @@ class Var:
         """Fit the model and calculate VaR and ES using different methods."""
         # Load data
         self.load_data()
+        self.plot_data()
         
         # Train/Test split
         data_train, data_test = self.train_test_split(start_train=start_train, start_test=start_test, end_test=end_test)
+        
+        # Stats
+        summary = {"Train set ":data_train.describe(), "Test set":data_test.describe()}
         
         # Historical VaR and ES
         res = self.Var_Hist(data_train[["return"]], alpha)
         VaR_hist, ES_hist = res["VaR"], res["ES"]
         bin_IC = self.exceedance_test(data_test[["return"]], VaR_hist, alpha_exceed=0.05)
+        
+        # Bootsrap historical VaR with CI
+        res = self.Var_Hist_Bootstrap(data_train[["return"]], alpha = 0.99, B = 252, alpha_IC = 0.90, M = 500)
+        VaR_bootstrap = res["VaR"]
+        VaR_IC = res
         
         # Gaussian parametric VaR and ES
         Z_gaussian = self.Var_param_gaussian(data_train["return"], alpha)
@@ -148,7 +157,10 @@ class Var:
         plt.legend()
         
         return {
+            "stats": summary,
             "VaR_hist": VaR_hist,
+            "VaR_bootstrap":VaR_bootstrap,
+            "VaR_IC":VaR_IC,
             "ES_hist": ES_hist,
             "VaR_gaussian": VaR_gaussian,
             "VaR_gaussian_10_day": VaR_gaussian_10_day,
