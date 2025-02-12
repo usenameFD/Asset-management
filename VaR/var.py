@@ -6,6 +6,11 @@ import matplotlib.pyplot as plt
 import scipy.stats as st
 import seaborn as sns
 from skew_student import optimize_parameters, skew_student_sim
+from scipy.optimize import minimize
+from scipy.stats import genextreme, gumbel_r, genpareto
+
+import scipy.stats as stats
+    
 
 class Var:
     def __init__(self, ticker, start_date, end_date):
@@ -111,7 +116,306 @@ class Var:
         z = st.norm.ppf(1 - alpha_exceed / 2)
         margin = z * np.sqrt(p_hat * (1 - p_hat) / len(data))
         return (p_hat - margin, p_hat + margin)
+
+    # VaR GEV
+    # 1. Déterminer une taille de bloc s et construire un échantillon de maxima
+    def block_maxima(self, data, block_size):
+        """
+        Calcule les maxima par bloc pour une série donnée.
         
+        Parameters:
+        - data: Série temporelle des pertes.
+        - block_size: Taille du bloc (en nombre d'observations).
+        
+        Returns:
+        - block_max: Liste des maxima par bloc.
+        """
+        n = len(data)
+        block_max = [max(data[i:i + block_size]) for i in range(0, n, block_size)]
+        return np.array(block_max)
+
+
+    ## Estimer les paramètres de la loi Gumbel
+    def fit_gumbel(self, data):
+        """
+        Estime les paramètres de la loi GEV par maximum de vraisemblance.
+        
+        Parameters:
+        - data: Série des maxima par bloc.
+        
+        Returns:
+        - shape (ξ), location (μ), scale (σ).
+        """
+        def neg_log_likelihood(params):
+            loc, scale = params
+            if scale <= 0:
+                return np.inf
+            return -np.sum(gumbel_r.logpdf(data, loc=loc, scale=scale))
+        
+        # Estimation initiale
+        initial_guess = [np.mean(data), np.std(data)]
+        result = minimize(neg_log_likelihood, initial_guess, method='Nelder-Mead')
+        loc, scale = result.x
+        return loc, scale, -neg_log_likelihood([loc, scale])
+
+    def gumbel_plot(self, data, loc, scale):
+        """
+        Trace le Gumbel plot pour vérifier l'hypothèse ξ=0.
+        
+        Parameters:
+        - data: Série des maxima par bloc.
+        """
+        theoretical_quantiles = gumbel_r.ppf(np.linspace(0.01, 0.99, 100), loc, scale)  # Quantiles de Gumbel
+        
+        # 2. Tracer le Gumbel Plot pour vérifier ξ = 0
+        empirical_quantiles = np.percentile(data, np.linspace(1, 99, 100))
+        
+        fig = plt.figure(figsize=(8, 6))
+        plt.scatter(theoretical_quantiles, empirical_quantiles, color='blue')
+        plt.plot(theoretical_quantiles, theoretical_quantiles, color='red', linestyle='--')
+        plt.xlabel('Quantiles théoriques (GEV)')
+        plt.ylabel('Quantiles empiriques')
+        plt.title('QQ-Plot (validation de la loi Gumbel ex-ante)')
+        plt.grid(True)
+        return fig
+
+    ## Estimer les paramètres de la loi GEV
+    def fit_gev(self, data):
+        """
+        Estime les paramètres de la loi GEV par maximum de vraisemblance.
+        
+        Parameters:
+        - data: Série des maxima par bloc.
+        
+        Returns:
+        - shape (ξ), location (μ), scale (σ).
+        """
+        def neg_log_likelihood(params):
+            shape, loc, scale = params
+            if scale <= 0:
+                return np.inf
+            return -np.sum(genextreme.logpdf(data, shape, loc=loc, scale=scale))
+        
+        # Estimation initiale
+        initial_guess = [0.1, np.mean(data), np.std(data)]
+        result = minimize(neg_log_likelihood, initial_guess, method='Nelder-Mead')
+        shape, loc, scale = result.x
+        return shape, loc, scale, -neg_log_likelihood([shape, loc, scale])
+
+    def LR_test(self, logL1, logL2):
+        LRT_stat = 2 * (logL2 - logL1)  # Model 2 vs Model 1
+        p_value = 1 -stats.chi2.cdf(LRT_stat, 1)
+
+        print(f"Likelihood Ratio Statistic: {LRT_stat:.4f}")
+        print(f"P-value: {p_value:.4f}")
+
+        if p_value < 0.05:
+            print("GEV model significantly improves the fit over Gumbel model.")
+            return False
+        else:
+            print("No significant improvement; prefer the Gumbel model.")
+            return True
+
+    # 4. Validation ex-ante (QQ-plot, etc.)
+    def gev_plot(self, data, shape, loc, scale):
+        """
+        Valide l'ajustement de la loi GEV par QQ-plot.
+        
+        Parameters:
+        - data: Série des maxima par bloc.
+        - shape, loc, scale: Paramètres de la loi GEV.
+        """
+        # QQ-plot
+        theoretical_quantiles = genextreme.ppf(np.linspace(0.01, 0.99, 100), shape, loc, scale)
+        empirical_quantiles = np.percentile(data, np.linspace(1, 99, 100))
+        
+        fig = plt.figure(figsize=(8, 6))
+        plt.scatter(theoretical_quantiles, empirical_quantiles, color='blue')
+        plt.plot(theoretical_quantiles, theoretical_quantiles, color='red', linestyle='--')
+        plt.xlabel('Quantiles théoriques (GEV)')
+        plt.ylabel('Quantiles empiriques')
+        plt.title('QQ-Plot (validation de la loi GEV ex-ante)')
+        plt.grid(True)
+        return fig
+
+    # 5. Calculer la VaR TVE par MB pour alpha = 99%
+    def calculate_var_gve(self, data, block_size, alpha=0.99):
+        """
+        Calcule la VaR TVE pour un niveau de confiance donné.
+        
+        Parameters:
+        - shape, loc, scale: Paramètres de la loi GEV.
+        - alpha: Niveau de confiance (par défaut 99%).
+        
+        Returns:
+        - VaR TVE.
+        """
+        block_max = self.block_maxima(data, block_size)
+
+        # 2. Estimer la Gumbel
+        _, _, logL1 = self.fit_gumbel(block_max)
+
+        # 3. Estimer les paramètres de la loi GEV
+        _, _, _, logL2 = self.fit_gev(block_max)
+
+        # Compare Gumbel and GEV
+        if self.LR_test(logL1, logL2):
+            loc, scale, _ = self.fit_gumbel(block_max)
+            VaR = gumbel_r.ppf(alpha**block_size, loc=loc, scale=scale)
+            fig = self.gumbel_plot(block_max, loc, scale)
+            return VaR, fig
+        else:
+            shape, loc, scale, logL2 = self.fit_gev(block_max)
+            VaR = genextreme.ppf(alpha**block_size, shape, loc=loc, scale=scale)
+            fig = self.gev_plot(block_max, shape, loc, scale)
+            return VaR, fig
+        
+    # VaR GPD
+    def mean_excess_plot(self, data, u_min=0, u_max=None, step=0.01):
+        """
+        Trace le Mean Excess Plot pour déterminer un seuil u approprié.
+
+        Parameters:
+        - data: Série des pertes (rendements négatifs).
+        - u_min: Seuil minimal à considérer.
+        - u_max: Seuil maximal à considérer.
+        - step: Pas pour l'incrémentation des seuils.
+
+        Returns:
+        - Un graphique du Mean Excess Plot.
+        """
+        if u_max is None:
+            u_max = np.quantile(data, 0.99)  # Ne pas considérer les valeurs trop extrêmes
+
+        thresholds = np.arange(u_min, u_max, step)
+        mean_excess = [np.mean(data[data > u] - u) for u in thresholds]
+
+        fig = plt.figure(figsize=(10, 6))
+        plt.plot(thresholds, mean_excess, 'bo-', label='Mean Excess')
+        plt.axhline(0, color='red', linestyle='--', label='Zero Line')
+        plt.xlabel('Seuil u')
+        plt.ylabel('Moyenne des excès')
+        plt.title('Mean Excess Plot')
+        plt.legend()
+        plt.grid()
+        return fig
+    
+    
+    def fit_gpd(self, data, u):
+        """
+        Ajuste une loi GPD aux excès au-dessus du seuil u.
+
+        Parameters:
+        - data: Série des pertes.
+        - u: Seuil choisi.
+
+        Returns:
+        - Paramètres de la GPD (shape, scale).
+        """
+        excess = data[data > u] - u
+        params = genpareto.fit(excess, floc=0)  # Ajustement de la GPD
+        return params
+
+
+    def gpd_validation(self, data, u, shape, scale):
+        """
+        Validation ex-ante de l'ajustement de la GPD.
+
+        Parameters:
+        - data: Série des pertes.
+        - u: Seuil choisi.
+        - shape, scale: Paramètres de la GPD.
+
+        Returns:
+        - QQ-plot et PP-plot.
+        """
+        excess = data[data > u] - u
+        n = len(excess)
+        theoretical_quantiles = genpareto.ppf(np.linspace(0, 1, n), shape, loc=0, scale=scale)
+        empirical_quantiles = np.sort(excess)
+
+        # QQ-plot
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+        axes[0].scatter(theoretical_quantiles, empirical_quantiles, color='blue')
+        axes[0].plot(theoretical_quantiles, theoretical_quantiles, color='red', linestyle='--')
+        axes[0].set_xlabel('Quantiles théoriques')
+        axes[0].set_ylabel('Quantiles empiriques')
+        axes[0].set_title('QQ-plot (validation GPD ex-ante)')
+        axes[0].grid()
+
+        # PP-plot
+        theoretical_probs = genpareto.cdf(empirical_quantiles, shape, loc=0, scale=scale)
+        empirical_probs = np.linspace(0, 1, n)
+        axes[1].scatter(theoretical_probs, empirical_probs, color='blue')
+        axes[1].plot([0, 1], [0, 1], color='red', linestyle='--')
+        axes[1].set_xlabel('Probabilités théoriques')
+        axes[1].set_ylabel('Probabilités empiriques')
+        axes[1].set_title('PP-plot (validation GPD ex-ante)')
+        axes[1].grid()
+
+        # Affichage
+        plt.tight_layout()
+        return fig
+
+    def var_tve_pot(self, data, u, shape, scale, alpha=0.99):
+        """
+        Calcule la VaR TVE par l'approche PoT.
+
+        Parameters:
+        - data: Série des pertes.
+        - u: Seuil choisi.
+        - shape, scale: Paramètres de la GPD.
+        - alpha: Niveau de confiance (par défaut 99%).
+
+        Returns:
+        - VaR TVE.
+        """
+        n = len(data)
+        nu = len(data[data > u])  # Nombre d'excès
+        var = u + (scale / shape) * (((n / nu) * (1 - alpha)) ** (-shape) - 1)
+        return var
+
+    def calibrate_u(self, data, alpha=0.99, step=0.0001):
+        """
+        Automatically calibrates the threshold u for Peak Over Threshold (PoT).
+        
+        Parameters:
+        - data: Loss data.
+        - alpha: Confidence level.
+        - u_min, u_max: Range of u values.
+        - step: Step size for threshold selection.
+        
+        Returns:
+        - Optimal u value.
+        """
+        u_min = np.quantile(data, 0.90) # To avoid recurrent values
+        u_max = np.quantile(data, 0.99)  # Avoid extreme values
+        
+        thresholds = np.arange(u_min, u_max, step)
+        shapes = []
+        scales = []
+        var_tve_values = []
+
+        for u in thresholds:
+            excess = data[data > u] - u
+            if len(excess) > 10:  # Ensure enough exceedances
+                shape, loc, scale = self.fit_gpd(data, u)
+                shapes.append(shape)
+                scales.append(scale)
+                var_tve_values.append(self.var_tve_pot(data, u, shape, scale, alpha))
+
+        # Identify the most stable threshold u
+        shape_stability = np.abs(np.diff(shapes))
+        scale_stability = np.abs(np.diff(scales))
+
+        stability = shape_stability + scale_stability
+        u_optimal_idx = np.argmin(stability) + 1  # Add 1 to match index
+        #plt.plot(thresholds[:-1],stability)  # Visualize how stability moves with thresholds
+        u_optimal = thresholds[u_optimal_idx]
+
+        return u_optimal
+    
+    # Fitting VaR
     def fit(self, start_train, start_test, end_test, alpha):
         """Fit the model and calculate VaR and ES using different methods."""
         # Load data
@@ -130,7 +434,7 @@ class Var:
         bin_IC = self.exceedance_test(data_test[["return"]], VaR_hist, alpha_exceed=0.05)
         
         # Bootsrap historical VaR with CI
-        res = self.Var_Hist_Bootstrap(data_train[["return"]], alpha = 0.99, B = 252, alpha_IC = 0.90, M = 500)
+        res = self.Var_Hist_Bootstrap(data_train[["return"]], alpha, B = 252, alpha_IC = 0.90, M = 500)
         VaR_bootstrap = res["VaR"]
         VaR_IC = res
         
@@ -139,7 +443,6 @@ class Var:
         res = self.Var_Hist(Z_gaussian[["return"]], alpha)
         VaR_gaussian, ES_gaussian = res["VaR"], res["ES"]
         VaR_gaussian_10_day = np.sqrt(10) * VaR_gaussian  # Corrected 10-day VaR calculation
-        
         qqplot_gaussian = self.qqplot(data_train["return"].values, Z_gaussian["return"].values)
         
         # Student parametric VaR and ES
@@ -156,6 +459,26 @@ class Var:
         plt.title('Density Comparison: Gaussian vs Student vs Empirical')
         plt.legend()
         
+        # VaR GEV
+        
+        block_size = 20  # Taille de bloc (max mensuel)
+        block_max = self.block_maxima(-data_train["return"].to_numpy(), block_size)
+
+        ## 2. Tracer le Gumbel plot
+        loc, scale, _ = self.fit_gumbel(block_max)
+        qqplot_gumbel = self.gumbel_plot(block_max, loc, scale)
+        
+        ##  Déterminer la VaR GEV (ou Gumbel)
+        VaR_gev, qqplot_gev = self.calculate_var_gve(-data_train["return"].to_numpy(), block_size, alpha)
+        VaR_gev = - VaR_gev
+
+        # VaR GPD
+        mrlplot = self.mean_excess_plot(-data_train["return"].to_numpy(), u_min=0, step=0.001)
+        u = self.calibrate_u(-data_train["return"].to_numpy(), alpha)  ## Calibrate optimal u
+        shape, loc, scale =self.fit_gpd(-data_train["return"].to_numpy(), u)
+        VaR_gpd = - self.var_tve_pot(-data_train["return"].to_numpy(), u, shape, scale, alpha)
+        qqplot_gpd = self.gpd_validation(-data_train["return"].to_numpy(), u, shape, scale)
+        
         return {
             "stats": summary,
             "VaR_hist": VaR_hist,
@@ -169,5 +492,10 @@ class Var:
             "ES_student": ES_student,
             "qqplot_gaussian": qqplot_gaussian,
             "qqplot_student": qqplot_student,
-            "Gaussian vs Student calibrations":fig
+            "Gaussian vs Student calibrations":fig,
+            "VaR_gev": VaR_gev,
+            "qqplot_gev": qqplot_gev,
+            "mrlplot": mrlplot,
+            "VaR_gpd": VaR_gpd,
+            "qqplot_gpd": qqplot_gpd
         }
