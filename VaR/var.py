@@ -8,8 +8,11 @@ import seaborn as sns
 from skew_student import optimize_parameters, skew_student_sim
 from scipy.optimize import minimize
 from scipy.stats import genextreme, gumbel_r, genpareto
+from arch import arch_model
+
 
 import scipy.stats as stats
+import plotly.graph_objects as go
     
 
 class Var:
@@ -50,7 +53,8 @@ class Var:
     
     def train_test_split(self, start_train, start_test, end_test):
         """Split data into training and testing sets."""
-        data_train = self.data.loc[start_train:start_test]
+        end_train =  pd.Timestamp(start_test) - pd.Timedelta(days=1)
+        data_train = self.data.loc[start_train:end_train]
         data_test = self.data.loc[start_test:end_test]
         return data_train, data_test
     
@@ -414,6 +418,129 @@ class Var:
         u_optimal = thresholds[u_optimal_idx]
 
         return u_optimal
+
+    # VAR DYNAMIQUE
+
+    def dynamic_VaR(self, data_train, data_test, alpha, start_test):
+        """
+        Calculate dynamic VaR and plot the results with a vertical line at the start of the test data.
+    
+        Parameters:
+            data_train (pd.DataFrame): Training data containing returns.
+            data_test (pd.DataFrame): Test data containing returns.
+            alpha (float): Confidence level for VaR (e.g., 0.05 for 95% confidence).
+            start_test (str or datetime): Date indicating the start of the test data.
+    
+        Returns:
+            fig: Plotly figure object.
+        """
+        # Fitting AR(1)_GARCH(1,1)
+        combined_model = arch_model(data_train['return'], mean='AR', lags=1, vol='Garch', p=1, q=1)
+        combined_fit = combined_model.fit()
+    
+        # Extract standardized residuals
+        std_residuals = combined_fit.std_resid.dropna().to_numpy()
+        std_residuals = -std_residuals  # Invert residuals
+    
+        # VaR on the standard residuals using GPD
+        u = self.calibrate_u(std_residuals, alpha)  # Calibrate optimal threshold
+        shape, loc, scale = self.fit_gpd(std_residuals, u)  # Fit GPD
+        VaR_res = -self.var_tve_pot(std_residuals, u, shape, scale, alpha)  # Calculate VaR
+    
+        # Extracting estimated parameters
+        mu, phi, omega, a, b = combined_fit.params
+    
+        # Calculate dynamic VaR on all data (train + test)
+        data = pd.concat([data_train, data_test])  # Combine train and test data
+    
+        # Initialize mu and vol
+        data["mu"] = mu + phi * data["return"].shift()
+        data["mu"].iloc[0] = mu  # Set initial value
+    
+        data["vol"] = np.sqrt(omega / (1 - a - b))  # Initialize volatility
+    
+        # Update volatility dynamically
+        for t in range(1, len(data)):
+            data["vol"].iloc[t] = np.sqrt(
+                omega
+                + a * (data["return"].iloc[t - 1] - data["mu"].iloc[t - 1]) ** 2
+                + b * data["vol"].iloc[t - 1] ** 2
+            )
+    
+        # Calculate dynamic VaR
+        data["VaR"] = data["mu"] + data["vol"] * VaR_res
+    
+        # Create a Plotly figure
+        fig = go.Figure()
+    
+        # Add VaR line
+        fig.add_trace(
+            go.Scatter(
+                x=data.index,
+                y=data["VaR"],
+                mode="lines",
+                name="VaR",
+                line=dict(color="red", dash="dash"),
+            )
+        )
+    
+        # Add returns line
+        fig.add_trace(
+            go.Scatter(
+                x=data.index,
+                y=data["return"],
+                mode="lines",
+                name="Rendements",
+                line=dict(color="blue"),
+            )
+        )
+    
+        # Identify points where VaR exceeds returns
+        exceedance_points = data[data["VaR"] > data["return"]]
+    
+        # Add exceedance points
+        fig.add_trace(
+            go.Scatter(
+                x=exceedance_points.index,
+                y=exceedance_points["return"],
+                mode="markers",
+                name="VaR > Rendement",
+                marker=dict(color="red", size=8),
+            )
+        )
+    
+        # Add vertical line at the start of the test data
+       # fig.add_vline(
+       #     x=pd.to_datetime(start_test),
+        #    line=dict(color="green", dash="dot"),
+        #    annotation_text="Start of Test Data",
+         #   annotation_position="top left",
+        #)
+    
+        # Add annotations for exceedance points
+        for date, return_value in exceedance_points["return"].items():
+            fig.add_annotation(
+                x=date,
+                y=return_value,
+                #text=date.strftime('%Y-%m-%d'),
+                showarrow=True,
+                arrowhead=1,
+                ax=0,
+                ay=-40,
+            )
+    
+        # Update layout
+        fig.update_layout(
+            title="Dynamic VaR vs Rendements",
+            xaxis_title="Date",
+            yaxis_title="Valeur",
+            legend_title="Legend",
+            hovermode="x unified",
+        )
+    
+        # Return the figure
+        return fig
+        
     
     # Fitting VaR
     def fit(self, start_train, start_test, end_test, alpha):
@@ -478,6 +605,9 @@ class Var:
         shape, loc, scale =self.fit_gpd(-data_train["return"].to_numpy(), u)
         VaR_gpd = - self.var_tve_pot(-data_train["return"].to_numpy(), u, shape, scale, alpha)
         qqplot_gpd = self.gpd_validation(-data_train["return"].to_numpy(), u, shape, scale)
+
+        # VaR dynamique
+        VaR_dyn = self.dynamic_VaR(data_train, data_test, alpha, start_test)
         
         return {
             "stats": summary,
@@ -497,5 +627,6 @@ class Var:
             "qqplot_gev": qqplot_gev,
             "mrlplot": mrlplot,
             "VaR_gpd": VaR_gpd,
-            "qqplot_gpd": qqplot_gpd
+            "qqplot_gpd": qqplot_gpd,
+            "VaR_dyn":VaR_dyn
         }
