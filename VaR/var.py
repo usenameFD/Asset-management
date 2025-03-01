@@ -88,6 +88,44 @@ class Var:
         Z = pd.DataFrame(Z, index=data.index, columns=["return"])
         return Z
     
+    # On calcule la VaR à horizon 10 jours par diffusion du cours du CAC40
+    def simulate_price_paths(self, t, S0, mu, sigma, num_simulations):
+        # Créer une matrice vide pour stocker les prix simulés à chaque étape
+        St = np.zeros((num_simulations, t))
+
+        # Simuler les trajectoires de prix
+        for i in range(num_simulations):
+            # Initialiser le premier prix à S0
+            St[i, 0] = S0
+
+            # Générer des variables aléatoires Z de loi normale standard
+            Z = np.random.normal(0, 1, t)
+            #print(Z)
+
+            # Calculer les prix simulés à chaque étape
+        for j in range(1, t):
+
+            St[i, j] = St[i, j-1] * np.exp((mu - 0.5 * sigma**2) + sigma * np.sqrt(1) * Z[j-1])
+
+        return St
+
+        ## ii - On calcule les log rendements à horizon 10 jours pour chacune des trajectoires
+
+    def calculate_log_returns(self, St, S0):
+        # Calculer les log returns
+        S0_scalar = S0.iloc[0]
+        log_returns = np.log(St[:, -1] / S0_scalar)  # Calcul des rendements log au bout de t jours
+        return log_returns
+
+        ### iii- On en déduit la valeur de la VaR 
+    
+    def calculate_var(self, log_returns, confidence_level=0.99):
+        # Calculer le quantile d'ordre (1 - percentile) de la distribution des pertes
+        var = np.percentile(log_returns, 100 * (1 - confidence_level))
+        return var
+
+    ## Protocole de backtesting
+
     def Var_param_student(self, data, alpha):
         """Calculate VaR using Skewed Student's t-distribution."""
         theta = optimize_parameters(data)
@@ -571,6 +609,18 @@ class Var:
         VaR_gaussian, ES_gaussian = res["VaR"], res["ES"]
         VaR_gaussian_10_day = np.sqrt(10) * VaR_gaussian  # Corrected 10-day VaR calculation
         qqplot_gaussian = self.qqplot(data_train["return"].values, Z_gaussian["return"].values)
+
+        ## VaR at 10 days horizon 
+        S0 = data_train['Close'].iloc[-1]
+        mu = np.mean(train_data['return'])
+        sigma = np.std(train_data['return'])
+        t = 11
+        num_simulations = 1000
+        St = self.simulate_price_paths(t, S0, mu, sigma, num_simulations)
+        # Calcul des rendements log
+        log_returns = self.calculate_log_returns(St, S0)
+        # Calcul de la VaR à 99%
+        VaR_gaussian_10_day_diff = self.calculate_var(log_returns)
         
         # Student parametric VaR and ES
         Z_student = self.Var_param_student(data_train["return"], alpha)
@@ -616,6 +666,7 @@ class Var:
             "VaR_IC":VaR_IC,
             "ES_hist": ES_hist,
             "VaR_gaussian": VaR_gaussian,
+            "VaR_gaussian_10_day_diff": VaR_gaussian_10_day_diff,
             "VaR_gaussian_10_day": VaR_gaussian_10_day,
             "ES_gaussian": ES_gaussian,
             "VaR_student": VaR_student,
