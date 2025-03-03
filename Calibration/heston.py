@@ -21,7 +21,7 @@ def heston(stock_price, initial_vol, kappa, theta, lambd, rho, r, T, K):
     V0 = initial_vol
     X0 = stock_price
     I = 1j  # Imaginary unit
-    P, umax, N = 0, 100, 1000
+    P, umax, N = 0, 1000, 10000
     du = umax / N
 
     aa = theta * kappa * T / lambd**2
@@ -118,7 +118,7 @@ def Bootstrap_Heston(C, S, K, tau, r, lamda, v_bar, rho, sigma, eta, M=100):
                          r = r, 
                          T = tau,
                          K = K)
-            weights[i] = norm.pdf(C[t], loc = C_t, scale = sigma**0.5)
+            weights[i] = norm.pdf(C[t], loc = C_t, scale = np.sqrt(sigma))
         weights /= np.sum(weights)
     
         resampled_particles, resampled_indices, resampled_weights = resample_particles(v, weights)
@@ -184,7 +184,7 @@ def APF(C, S, K, tau, r, lamda, v_bar, rho, sigma, eta, M=100):
                          K = K)
     
             # Etape 5 Update weights
-            weights[i] = norm.pdf(C[t], C_t_num, sigma**0.5) /p_mu_t[resampled_indices[i]]
+            weights[i] = norm.pdf(C[t], C_t_num, np.sqrt(sigma)) /p_mu_t[resampled_indices[i]]
         # Normalize weights
         weights /= np.sum(weights)
         v_t.append(np.mean(x_particles))
@@ -210,7 +210,7 @@ def APF_modified(C, S, K, tau, r, lamda, v_bar, rho, sigma, eta, M=100):
         p_mu_t = []
         for i in range(M):
             mu = x_particles[i] + lamda * delta * (v_bar - x_particles[i])
-            sig =  eta * np.sqrt(x_particles[i]*delta)
+            #sig =  eta * np.sqrt(x_particles[i]*delta)
             #mu_t = sig * np.sqrt(2/np.pi) * np.exp(-0.5*(mu/sig)**2) + mu * (1-2*norm.cdf(-mu/sig))
             mu_t = np.abs(mu)#
             C_t = heston(stock_price = S[t],
@@ -222,7 +222,7 @@ def APF_modified(C, S, K, tau, r, lamda, v_bar, rho, sigma, eta, M=100):
                          r = r, 
                          T = tau,
                          K = K)
-            p_mu_t.append(norm.pdf(C[t], loc = C_t, scale = sigma**0.5))
+            p_mu_t.append(norm.pdf(C[t], loc = C_t, scale = np.sqrt(sigma)))
             weights[i] = weights[i] * p_mu_t[i]
             
 
@@ -247,7 +247,7 @@ def APF_modified(C, S, K, tau, r, lamda, v_bar, rho, sigma, eta, M=100):
                          K = K)
     
             # Etape 5 Update weights
-            weights[i] = norm.pdf(C[t], C_t_num, sigma**0.5) /p_mu_t[resampled_indices[i]]
+            weights[i] = norm.pdf(C[t], C_t_num, np.sqrt(sigma)) /p_mu_t[resampled_indices[i]]
         # Normalize weights
         weights /= np.sum(weights)
         v_t.append(np.mean(x_particles))
@@ -272,8 +272,8 @@ def SimHeston(S0, K, tau, r, lamda, v_bar, rho, sigma, eta, size = 252):
                                          np.array([[1,rho],[rho,1]]))
         mu = v[t-1] + lamda * delta * (v_bar - v[t-1])
         sig =  eta * np.sqrt(v[t-1]*delta)
-        v.append(np.abs(mu + sig*Z[1]))
-        S.append(S[t-1]*(1 + r * delta + np.sqrt(delta*v[t])*Z[0]))
+        v.append(np.abs(mu + sig*Z[0]))
+        S.append(S[t-1]*(1 + r * delta + np.sqrt(delta*v[t-1])*Z[1]))
         C.append(heston(stock_price = S[t],
                          initial_vol = v[t],
                          kappa = lamda,
@@ -284,4 +284,3 @@ def SimHeston(S0, K, tau, r, lamda, v_bar, rho, sigma, eta, size = 252):
                          T = tau,
                          K = K) + np.sqrt(sigma)*np.random.normal(0,1))
     return S, C, v
-                                          
