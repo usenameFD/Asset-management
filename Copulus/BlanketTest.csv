@@ -1,0 +1,6 @@
+Copule,Statique,p_value
+<class 'copulae.elliptical.student.StudentCopula'>,204.89979830819433,0.57
+<class 'copulae.elliptical.gaussian.GaussianCopula'>,0.054594929817454826,0.002
+<class 'copulae.archimedean.clayton.ClaytonCopula'>,0.8648063802477464,0.0
+<class 'copulae.archimedean.gumbel.GumbelCopula'>,0.03485726361199552,0.002
+<class 'copulae.archimedean.frank.FrankCopula'>,0.6029163706819907,0.004
