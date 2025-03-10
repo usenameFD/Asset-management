@@ -113,7 +113,7 @@ class Var:
 
     def calculate_log_returns(self, St, S0):
         # Calculer les log returns
-        S0_scalar = S0.iloc[0]
+        S0_scalar = S0
         log_returns = np.log(St[:, -1] / S0_scalar)  # Calcul des rendements log au bout de t jours
         return log_returns
 
@@ -612,8 +612,8 @@ class Var:
 
         ## VaR at 10 days horizon 
         S0 = data_train['Close'].iloc[-1]
-        mu = np.mean(train_data['return'])
-        sigma = np.std(train_data['return'])
+        mu = np.mean(data_train['return'])
+        sigma = np.std(data_train['return'])
         t = 11
         num_simulations = 1000
         St = self.simulate_price_paths(t, S0, mu, sigma, num_simulations)
