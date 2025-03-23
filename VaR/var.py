@@ -13,6 +13,7 @@ from arch import arch_model
 
 import scipy.stats as stats
 import plotly.graph_objects as go
+from scipy.stats import gaussian_kde
     
 
 class Var:
@@ -33,22 +34,48 @@ class Var:
         self.data = data
         
     def plot_data(self):
-        """Plot historical returns and closing prices."""
-        fig, ax1 = plt.subplots()
+        """Plot historical returns and closing prices using Plotly."""
+        fig = go.Figure()
 
         # First y-axis for returns
-        ax1.plot(self.data.index, self.data["return"], color='r', label=f'Hist Return {self.ticker}')
-        ax1.set_ylabel('Return', color='r')
-        ax1.tick_params(axis='y', labelcolor='r')
+        fig.add_trace(go.Scatter(
+            x=self.data.index, 
+            y=self.data["return"],
+            mode='lines',
+            name=f'Hist Return {self.ticker}',
+            line=dict(color='red'),
+        ))
 
         # Second y-axis for closing prices
-        ax2 = ax1.twinx()
-        ax2.plot(self.data.index, self.data["Close"], color='b', label=f'Hist Close {self.ticker}')
-        ax2.set_ylabel('Close', color='b')
-        ax2.tick_params(axis='y', labelcolor='b')
-        
-        plt.title(f'{self.ticker} Historical Data')
-        plt.legend()
+        fig.add_trace(go.Scatter(
+            x=self.data.index, 
+            y=self.data["Close"],
+            mode='lines',
+            name=f'Hist Close {self.ticker}',
+            line=dict(color='blue'),
+            yaxis='y2',  # This ensures that the second trace uses the second y-axis
+        ))
+
+        # Update layout to add a second y-axis
+        fig.update_layout(
+            title=f'{self.ticker} Historical Data',
+            xaxis_title='Date',
+            yaxis=dict(
+                title='Return',
+                titlefont=dict(color='red'),
+                tickfont=dict(color='red'),
+            ),
+            yaxis2=dict(
+                title='Close',
+                titlefont=dict(color='blue'),
+                tickfont=dict(color='blue'),
+                overlaying='y',  # This ensures the second y-axis shares the same x-axis
+                side='right',    # The second y-axis will be on the right side
+            ),
+            showlegend=True,
+            template='plotly_dark',  # Optional, change template as needed
+        )
+
         return fig
     
     def train_test_split(self, start_train, start_test, end_test):
@@ -139,14 +166,82 @@ class Var:
         quantiles_x = np.percentile(df_observed, np.linspace(0, 100, len(df_observed)))
         quantiles_y = np.percentile(df_simulated, np.linspace(0, 100, len(df_simulated)))
 
-        fig = plt.figure(figsize=(8, 6))
-        plt.scatter(quantiles_x, quantiles_y, alpha=0.5)
-        plt.plot([min(quantiles_x), max(quantiles_x)], [min(quantiles_x), max(quantiles_x)], color='red', linestyle='--')
-        plt.title('QQ Plot Comparing Quantiles of Observed and Simulated Data')
-        plt.xlabel('Empirical Quantiles')
-        plt.ylabel('Theoretical Quantiles')
-        plt.grid(True)
-        plt.legend()
+        # Create Plotly figure
+        fig = go.Figure()
+
+        # Scatter plot for the observed vs simulated quantiles
+        fig.add_trace(go.Scatter(
+            x=quantiles_x,
+            y=quantiles_y,
+            mode='markers',
+            name='Observed vs Simulated',
+            marker=dict(color='blue', size=8, opacity=0.5)
+        ))
+
+        # Add the y=x line (red dashed line)
+        fig.add_trace(go.Scatter(
+            x=[min(quantiles_x), max(quantiles_x)],
+            y=[min(quantiles_x), max(quantiles_x)],
+            mode='lines',
+            name='y = x',
+            line=dict(color='red', dash='dash')
+        ))
+
+        # Customize layout
+        fig.update_layout(
+            title='QQ Plot Comparing Quantiles of Observed and Simulated Data',
+            xaxis_title='Empirical Quantiles',
+            yaxis_title='Theoretical Quantiles',
+            showlegend=True,
+            template='plotly_dark',  # Optional, you can customize templates
+            plot_bgcolor='rgba(0, 0, 0, 0)',  # Make background transparent
+            xaxis=dict(showgrid=True),
+            yaxis=dict(showgrid=True)
+        )
+
+        return fig
+    
+    def density_comparison_plot(self, data_train, Z_gaussian, Z_student):
+        """
+        Generate a density comparison plot using Plotly.
+
+        Parameters:
+        - data_train: DataFrame containing historical returns.
+        - Z_gaussian: DataFrame with Gaussian simulated returns.
+        - Z_student: DataFrame with Student simulated returns.
+
+        Returns:
+        - A Plotly figure object.
+        """
+        # Define a common range for KDE estimation
+        x_vals = np.linspace(
+            min(data_train["return"].min(), Z_gaussian["return"].min(), Z_student["return"].min()),
+            max(data_train["return"].max(), Z_gaussian["return"].max(), Z_student["return"].max()),
+            200
+        )
+
+        # Compute Kernel Density Estimates (KDEs)
+        empirical_kde = gaussian_kde(data_train["return"].dropna())(x_vals)
+        gaussian_kde_vals = gaussian_kde(Z_gaussian["return"].dropna())(x_vals)
+        student_kde_vals = gaussian_kde(Z_student["return"].dropna())(x_vals)
+
+        # Create Plotly traces
+        trace_empirical = go.Scatter(x=x_vals, y=empirical_kde, mode="lines", name="Empirical", line=dict(color="blue"))
+        trace_gaussian = go.Scatter(x=x_vals, y=gaussian_kde_vals, mode="lines", name="Gaussian", line=dict(color="red", dash="dash"))
+        trace_student = go.Scatter(x=x_vals, y=student_kde_vals, mode="lines", name="Student", line=dict(color="green", dash="dot"))
+
+        # Create the figure
+        fig = go.Figure([trace_empirical, trace_gaussian, trace_student])
+
+        # Update layout
+        fig.update_layout(
+            title="Density Comparison: Gaussian vs Student vs Empirical",
+            xaxis_title="Returns",
+            yaxis_title="Density",
+            template="plotly_white",
+            showlegend=True
+        )
+
         return fig
         
     def exceedance_test(self, data, VaR, alpha_exceed=0.05):
@@ -206,19 +301,45 @@ class Var:
         
         Parameters:
         - data: Série des maxima par bloc.
+        - loc, scale: Paramètres de la loi Gumbel.
         """
-        theoretical_quantiles = gumbel_r.ppf(np.linspace(0.01, 0.99, 100), loc, scale)  # Quantiles de Gumbel
-        
-        # 2. Tracer le Gumbel Plot pour vérifier ξ = 0
+        # Calculate the theoretical and empirical quantiles
+        theoretical_quantiles = gumbel_r.ppf(np.linspace(0.01, 0.99, 100), loc, scale)
         empirical_quantiles = np.percentile(data, np.linspace(1, 99, 100))
-        
-        fig = plt.figure(figsize=(8, 6))
-        plt.scatter(theoretical_quantiles, empirical_quantiles, color='blue')
-        plt.plot(theoretical_quantiles, theoretical_quantiles, color='red', linestyle='--')
-        plt.xlabel('Quantiles théoriques (GEV)')
-        plt.ylabel('Quantiles empiriques')
-        plt.title('QQ-Plot (validation de la loi Gumbel ex-ante)')
-        plt.grid(True)
+
+        # Create the Gumbel QQ-Plot using Plotly
+        fig = go.Figure()
+
+        # Scatter plot for the data points
+        fig.add_trace(go.Scatter(
+            x=theoretical_quantiles,
+            y=empirical_quantiles,
+            mode='markers',
+            name='Empirical vs Theoretical',
+            marker=dict(color='blue', size=8)
+        ))
+
+        # Add the line y=x (red dashed line) for reference
+        fig.add_trace(go.Scatter(
+            x=theoretical_quantiles,
+            y=theoretical_quantiles,
+            mode='lines',
+            name='y = x',
+            line=dict(color='red', dash='dash')
+        ))
+
+        # Layout customization
+        fig.update_layout(
+            title='QQ-Plot (validation de la loi Gumbel ex-ante)',
+            xaxis_title='Quantiles théoriques (Gumbel)',
+            yaxis_title='Quantiles empiriques',
+            showlegend=True,
+            template='plotly_dark',  # Optional: You can choose other templates
+            plot_bgcolor='rgba(0, 0, 0, 0)',  # Make background transparent
+            xaxis=dict(showgrid=True),
+            yaxis=dict(showgrid=True)
+        )
+
         return fig
 
     ## Estimer les paramètres de la loi GEV
@@ -267,17 +388,43 @@ class Var:
         - data: Série des maxima par bloc.
         - shape, loc, scale: Paramètres de la loi GEV.
         """
-        # QQ-plot
+        # Calculate the theoretical and empirical quantiles
         theoretical_quantiles = genextreme.ppf(np.linspace(0.01, 0.99, 100), shape, loc, scale)
         empirical_quantiles = np.percentile(data, np.linspace(1, 99, 100))
-        
-        fig = plt.figure(figsize=(8, 6))
-        plt.scatter(theoretical_quantiles, empirical_quantiles, color='blue')
-        plt.plot(theoretical_quantiles, theoretical_quantiles, color='red', linestyle='--')
-        plt.xlabel('Quantiles théoriques (GEV)')
-        plt.ylabel('Quantiles empiriques')
-        plt.title('QQ-Plot (validation de la loi GEV ex-ante)')
-        plt.grid(True)
+
+        # Create the QQ-Plot using Plotly
+        fig = go.Figure()
+
+        # Scatter plot for the data points
+        fig.add_trace(go.Scatter(
+            x=theoretical_quantiles,
+            y=empirical_quantiles,
+            mode='markers',
+            name='Empirical vs Theoretical',
+            marker=dict(color='blue', size=8)
+        ))
+
+        # Add the line y=x (red dashed line) for reference
+        fig.add_trace(go.Scatter(
+            x=theoretical_quantiles,
+            y=theoretical_quantiles,
+            mode='lines',
+            name='y = x',
+            line=dict(color='red', dash='dash')
+        ))
+
+        # Layout customization
+        fig.update_layout(
+            title='QQ-Plot (validation de la loi GEV ex-ante)',
+            xaxis_title='Quantiles théoriques (GEV)',
+            yaxis_title='Quantiles empiriques',
+            showlegend=True,
+            template='plotly_dark',  # Optional: You can choose other templates
+            plot_bgcolor='rgba(0, 0, 0, 0)',  # Make background transparent
+            xaxis=dict(showgrid=True),
+            yaxis=dict(showgrid=True)
+        )
+
         return fig
 
     # 5. Calculer la VaR TVE par MB pour alpha = 99%
@@ -324,7 +471,7 @@ class Var:
         - step: Pas pour l'incrémentation des seuils.
 
         Returns:
-        - Un graphique du Mean Excess Plot.
+        - Un graphique du Mean Excess Plot sous forme de figure Plotly.
         """
         if u_max is None:
             u_max = np.quantile(data, 0.99)  # Ne pas considérer les valeurs trop extrêmes
@@ -332,15 +479,40 @@ class Var:
         thresholds = np.arange(u_min, u_max, step)
         mean_excess = [np.mean(data[data > u] - u) for u in thresholds]
 
-        fig = plt.figure(figsize=(10, 6))
-        plt.plot(thresholds, mean_excess, 'bo-', label='Mean Excess')
-        plt.axhline(0, color='red', linestyle='--', label='Zero Line')
-        plt.xlabel('Seuil u')
-        plt.ylabel('Moyenne des excès')
-        plt.title('Mean Excess Plot')
-        plt.legend()
-        plt.grid()
+        # Create the Mean Excess Plot using Plotly
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=thresholds,
+            y=mean_excess,
+            mode='markers+lines',
+            name='Mean Excess',
+            marker=dict(color='blue', size=8)
+        ))
+
+        # Add zero line for reference
+        fig.add_trace(go.Scatter(
+            x=[thresholds[0], thresholds[-1]],
+            y=[0, 0],
+            mode='lines',
+            name='Zero Line',
+            line=dict(color='red', dash='dash')
+        ))
+
+        # Layout customization
+        fig.update_layout(
+            title='Mean Excess Plot',
+            xaxis_title='Seuil u',
+            yaxis_title='Moyenne des excès',
+            showlegend=True,
+            template='plotly_dark',  # Optional: You can choose other templates
+            plot_bgcolor='rgba(0, 0, 0, 0)',  # Make background transparent
+            xaxis=dict(showgrid=True),
+            yaxis=dict(showgrid=True)
+        )
+
         return fig
+
     
     
     def fit_gpd(self, data, u):
@@ -369,34 +541,84 @@ class Var:
         - shape, scale: Paramètres de la GPD.
 
         Returns:
-        - QQ-plot et PP-plot.
+        - QQ-plot et PP-plot sous forme de figure Plotly.
         """
         excess = data[data > u] - u
         n = len(excess)
         theoretical_quantiles = genpareto.ppf(np.linspace(0, 1, n), shape, loc=0, scale=scale)
         empirical_quantiles = np.sort(excess)
 
-        # QQ-plot
-        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-        axes[0].scatter(theoretical_quantiles, empirical_quantiles, color='blue')
-        axes[0].plot(theoretical_quantiles, theoretical_quantiles, color='red', linestyle='--')
-        axes[0].set_xlabel('Quantiles théoriques')
-        axes[0].set_ylabel('Quantiles empiriques')
-        axes[0].set_title('QQ-plot (validation GPD ex-ante)')
-        axes[0].grid()
+        # QQ-Plot
+        qq_trace = go.Scatter(
+            x=theoretical_quantiles,
+            y=empirical_quantiles,
+            mode='markers',
+            name='Empirical vs Theoretical',
+            marker=dict(color='blue')
+        )
 
-        # PP-plot
+        qq_line = go.Scatter(
+            x=theoretical_quantiles,
+            y=theoretical_quantiles,
+            mode='lines',
+            name='Ideal Line',
+            line=dict(color='red', dash='dash')
+        )
+
+        # PP-Plot
         theoretical_probs = genpareto.cdf(empirical_quantiles, shape, loc=0, scale=scale)
         empirical_probs = np.linspace(0, 1, n)
-        axes[1].scatter(theoretical_probs, empirical_probs, color='blue')
-        axes[1].plot([0, 1], [0, 1], color='red', linestyle='--')
-        axes[1].set_xlabel('Probabilités théoriques')
-        axes[1].set_ylabel('Probabilités empiriques')
-        axes[1].set_title('PP-plot (validation GPD ex-ante)')
-        axes[1].grid()
 
-        # Affichage
-        plt.tight_layout()
+        pp_trace = go.Scatter(
+            x=theoretical_probs,
+            y=empirical_probs,
+            mode='markers',
+            name='Empirical vs Theoretical',
+            marker=dict(color='blue')
+        )
+
+        pp_line = go.Scatter(
+            x=[0, 1],
+            y=[0, 1],
+            mode='lines',
+            name='Ideal Line',
+            line=dict(color='red', dash='dash')
+        )
+
+        # Creating the figure
+        fig = go.Figure()
+
+        # Add QQ plot data
+        fig.add_trace(qq_trace)
+        fig.add_trace(qq_line)
+
+        # Add PP plot data
+        fig.add_trace(pp_trace)
+        fig.add_trace(pp_line)
+
+        # Update the layout to include titles and axis labels
+        fig.update_layout(
+            title='Validation of GPD Fit: QQ-Plot and PP-Plot',
+            xaxis_title='Theoretical Quantiles / Probabilities',
+            yaxis_title='Empirical Quantiles / Probabilities',
+            template='plotly_dark',  # Optional, adjust the template as needed
+            showlegend=True,
+            xaxis=dict(
+                title='Quantiles (QQ-Plot) / Probabilities (PP-Plot)',
+            ),
+            yaxis=dict(
+                title='Quantiles (QQ-Plot) / Probabilities (PP-Plot)',
+            ),
+            legend=dict(
+                x=0.1, y=0.9,
+                traceorder='normal',
+                font=dict(size=12),
+                bgcolor='rgba(255, 255, 255, 0.5)',
+                bordercolor='Black',
+                borderwidth=1
+            ),
+        )
+
         return fig
 
     def var_tve_pot(self, data, u, shape, scale, alpha=0.99):
