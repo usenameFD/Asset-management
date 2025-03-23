@@ -6,7 +6,6 @@ import numpy as np
 import plotly.express as px
 from datetime import date
 
-from var import Var
 
 class Analyse:
     def __init__(self):
@@ -124,34 +123,58 @@ class Analyse:
                                     ], width=12),
                                 ]),
                             ]),
-                            dcc.Tab(label='Plots', children=[
+                            ##########################################
+                            dcc.Tab(label='Back Tresting', children=[
                                 dbc.Row([
                                     dbc.Col([
-                                        dcc.Graph(id="qqplot-gaussian"),
-                                    ], width=6),
+                                        html.Label("Select Backtest Date:", style={"fontWeight": "bold"}),
+                                        dcc.DatePickerSingle(
+                                            id="backtest-date",
+                                            min_date_allowed=date(2000, 1, 1),
+                                            max_date_allowed=date.today(),
+                                            initial_visible_month=date(2024, 1, 1),
+                                            date=date(2024, 1, 1),  # Default date
+                                        ),
+                                    ], width=4),
                                     dbc.Col([
-                                        dcc.Graph(id="qqplot-student"),
-                                    ], width=6),
+                                        html.Br(),
+                                        dbc.Button("Run Backtest", id="run-backtest", color="primary", n_clicks=0),
+                                    ], width=2),
                                 ]),
+                                html.Br(),
                                 dbc.Row([
                                     dbc.Col([
-                                        dcc.Graph(id="density-comparison"),
-                                    ], width=12),
-                                ]),
-                                dbc.Row([
-                                    dbc.Col([
-                                        dcc.Graph(id="mrlplot"),
-                                    ], width=6),
-                                    dbc.Col([
-                                        dcc.Graph(id="qqplot-gev"),
-                                    ], width=6),
-                                ]),
-                                dbc.Row([
-                                    dbc.Col([
-                                        dcc.Graph(id="qqplot-gpd"),
+                                        html.H5("Backtesting Results", style={"textAlign": "center", "marginTop": "10px"}),
+                                        html.Div(id="backtest-message", style={"color": "blue", "fontWeight": "bold"}),
+                                        dash_table.DataTable(
+                                            id="backtest-results-table",
+                                            columns=[],  # Will be dynamically updated
+                                            data=[],  # Initially empty
+                                            style_table={"overflowX": "auto"},
+                                            style_cell={"textAlign": "center", "fontFamily": "Arial", "fontSize": "14px"},
+                                            style_header={"fontWeight": "bold", "backgroundColor": "#f4f4f4"},
+                                            page_size=5,  # Limit rows per page
+                                        ),
                                     ], width=12),
                                 ]),
                             ]),
+                            ###################################################
+                            dcc.Tab(label='Plots', children=[
+                                dbc.Row([
+                                    dbc.Col([dcc.Graph(id="qqplot-gaussian")], width=6),
+                                    dbc.Col([dcc.Graph(id="qqplot-student")], width=6),
+                                ]),
+                                dbc.Row([dbc.Col([dcc.Graph(id="density-comparison")], width=12)]),
+                                dbc.Row([
+                                    dbc.Col([dcc.Graph(id="mrlplot")], width=6),
+                                    dbc.Col([dcc.Graph(id="qqplot-gev")], width=6),
+                                ]),
+                                dbc.Row([
+                                    dbc.Col([dcc.Graph(id="qqplot-gpd")], width=6),
+                                    dbc.Col([dcc.Graph(id="qqplot-gumbel")], width=6),
+                                ]),
+                            ]),
+                            ##################################################
                         ]),
                     ], width=9),
                 ]),

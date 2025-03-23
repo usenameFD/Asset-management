@@ -13,7 +13,7 @@ from arch import arch_model
 
 import scipy.stats as stats
 import plotly.graph_objects as go
-from scipy.stats import gaussian_kde
+from scipy.stats import gaussian_kde, chi2
     
 
 class Var:
@@ -164,8 +164,135 @@ class Var:
         
         return var
 
-    ## Protocole de backtesting
 
+    ## Protocole de backtesting
+    
+    def perform_backtest(self, data_test, var_99, significance_level_var=0.01, significance_test=0.05):
+        """
+        Effectue les tests d'unconditional coverage et d'indépendance sur un modèle de VaR.
+        
+        - Unconditional Coverage : Vérifie si la proportion d'excès observés correspond au seuil théorique (par exemple, 1% pour une VaR à 99%).
+        - Indépendance : Vérifie si les excès observés sont indépendants entre eux.
+        
+        Retourne True si les tests sont validés (p-value > seuil de signification), sinon False.
+        
+        Parameters:
+        -----------
+        - data_test : pandas.DataFrame
+            DataFrame contenant les rendements log des actifs.
+        - var_99 : float
+            Valeur de la VaR à 99%.
+        - significance_level_var : float, optionnel (default=0.01)
+            Niveau de signification pour le test d'Unconditional Coverage.
+        - significance_test : float, optionnel (default=0.05)
+            Niveau de signification pour les tests statistiques.
+
+        Returns:
+        --------
+        - valid_tests : bool
+            True si les deux tests sont validés, False sinon.
+        - n_exceed : int
+            Nombre d'excès observés.
+
+        """
+        # Test d'Unconditional Coverage
+        data_test['VaR_exceedance'] = data_test['return'] < var_99
+        n_exceed = data_test['VaR_exceedance'].sum()
+        obs = len(data_test)
+        prob_emp = n_exceed / obs
+        LR_uc = -2 * np.log(((1 - significance_level_var) ** (obs - n_exceed)) * (significance_level_var ** n_exceed)) + \
+                2 * np.log(((1 - prob_emp) ** (obs - n_exceed)) * (prob_emp ** n_exceed))
+        p_value_uc = 1 - chi2.cdf(LR_uc, df=1)
+
+        # Test d'Indépendance
+        data_test['T_0_1'] = ((data_test['VaR_exceedance'].shift(1) == 0) & (data_test['VaR_exceedance'] == 1)).astype(int)
+        data_test['T_1_0'] = ((data_test['VaR_exceedance'].shift(1) == 1) & (data_test['VaR_exceedance'] == 0)).astype(int)
+        data_test['T_1_1'] = ((data_test['VaR_exceedance'].shift(1) == 1) & (data_test['VaR_exceedance'] == 1)).astype(int)
+        data_test['T_0_0'] = ((data_test['VaR_exceedance'].shift(1) == 0) & (data_test['VaR_exceedance'] == 0)).astype(int)
+        sum_T_0_1 = data_test['T_0_1'].sum()
+        sum_T_1_0 = data_test['T_1_0'].sum()
+        sum_T_1_1 = data_test['T_1_1'].sum()
+        sum_T_0_0 = data_test['T_0_0'].sum()
+        Pi_0 = sum_T_0_1 / (sum_T_0_0 + sum_T_0_1)
+        Pi_1 = sum_T_1_1 / (sum_T_1_0 + sum_T_1_1)
+        Pi = n_exceed / len(data_test)
+        LRind = -2 * np.log(((1 - Pi) ** (sum_T_0_0 + sum_T_1_0)) * (Pi ** (sum_T_0_1 + sum_T_1_1))) + \
+            2 * np.log(((1 - Pi_0) ** sum_T_0_0) * (Pi_0 ** sum_T_0_1) * ((1 - Pi_1) ** sum_T_0_1) * (Pi_1 ** sum_T_1_1))
+        p_value_ind = 1 - chi2.cdf(LRind, df=1)
+
+        return (p_value_uc > significance_test) and (p_value_ind > significance_test), n_exceed
+
+
+    def adaptive_backtesting(self, data_train, data_test, window_size=30, max_no_exce=252, alpha = 0.99):
+        """
+        Implémente un protocole de backtesting adaptatif avec recalibrage.
+        
+        - data_train : données historiques pour l'entraînement du modèle.
+        - data_test : données de test pour le backtest.
+        - window_size : taille de la fenêtre d'entraînement.
+        - max_no_exce : nombre maximal de jours consécutifs sans exception.
+
+        Retourne :
+        - result_var : VaR recalculées après chaque recalibrage.
+        - result_date_recalib : Dates des recalibrages effectués.
+        - jours_recalibrage : Indices des jours où un recalibrage a eu lieu.
+        """
+        recalibration_count = 0
+        days_without_exception = 0
+        result_var = []
+        result_date_recalib = []
+        jours_recalibrage = []
+
+        while len(data_test) > window_size:
+            # Calculer la VaR gaussienne sur la période d'entraînement
+            Z_gaussian = self.Var_param_gaussian(data_train["return"], alpha)
+            res = self.Var_Hist(Z_gaussian[["return"]], alpha)
+            var_99 = res["VaR"]
+            for i in range(window_size, len(data_test)):
+                subset_test = data_test.iloc[:i]
+                result_backtest, n_exceed = self.perform_backtest(subset_test, var_99)
+
+                if not result_backtest:
+                    # Si le backtest échoue, procéder au recalibrage
+                    days_without_exception = 0
+                    jours_recalibrage.append(i)
+                    recalibration_count += 1
+                    print(f"La VaR est recalibrée à la date {data_test.index[i].strftime('%Y-%m-%d')}\n"
+                    f"après {i} jours.")
+                    print('-'*60)
+                    data_train = pd.concat([data_train.iloc[i:], data_test.iloc[:i]])
+                    
+                    Z_gaussian = self.Var_param_gaussian(data_train["return"], alpha)
+                    res = self.Var_Hist(Z_gaussian[["return"]], alpha)
+                    var_99 = res["VaR"]
+                    
+                    result_var.append(var_99)
+                    result_date_recalib.append(data_test.index[i].strftime('%Y-%m-%d'))
+                    data_test = data_test.iloc[i:] 
+                    
+                    break
+
+                ## On compte le nombre de jours consécutifs sans exception      
+                if n_exceed == 0:
+                    days_without_exception += 1
+                else:
+                    days_without_exception = 0  # On reset si une exception est détectée
+
+                ## Au cas où on a fait 252 jours consécutifs sans exception et que les tests sont passés, on fait un le recalibrage    
+                if days_without_exception >= max_no_exce:
+                    recalibration_count += 1
+                    days_without_exception = 0  # Reset du compteur
+                    data_train = pd.concat([data_train.iloc[max_no_exce:], data_test.iloc[:max_no_exce]])
+                    data_test = data_test.iloc[max_no_exce:]
+                    break
+            else:
+                # Si tout est validé, on arrêt le backtest
+                break
+        return result_var, result_date_recalib, jours_recalibrage
+    
+    
+    #Student VaR
+    
     def Var_param_student(self, data, alpha):
         """Calculate VaR using Skewed Student's t-distribution."""
         theta = optimize_parameters(data)
@@ -871,6 +998,11 @@ class Var:
         plt.title('Density Comparison: Gaussian vs Student vs Empirical')
         plt.legend()
         
+        # Back testing
+        
+        res = self.adaptive_backtesting(data_train, data_test, window_size=30, max_no_exce=252, alpha = 0.99)
+        res = {"Days since last recalibration":res[0], "recalibrated VaR":res[1], "Recalibration date":res[2]}
+        
         # VaR GEV
         
         block_size = 20  # Taille de bloc (max mensuel)
@@ -880,9 +1012,6 @@ class Var:
         loc, scale, _ = self.fit_gumbel(block_max)
         qqplot_gumbel = self.gumbel_plot(block_max, loc, scale)
         
-        ##  Déterminer la VaR GEV (ou Gumbel)
-        VaR_gev, qqplot_gev = self.calculate_var_gve(-data_train["return"].to_numpy(), block_size, alpha)
-        VaR_gev = - VaR_gev
 
         # VaR GPD
         mrlplot = self.mean_excess_plot(-data_train["return"].to_numpy(), u_min=0, step=0.001)
@@ -890,9 +1019,6 @@ class Var:
         shape, loc, scale =self.fit_gpd(-data_train["return"].to_numpy(), u)
         VaR_gpd = - self.var_tve_pot(-data_train["return"].to_numpy(), u, shape, scale, alpha)
         qqplot_gpd = self.gpd_validation(-data_train["return"].to_numpy(), u, shape, scale)
-
-        # VaR dynamique
-        VaR_dyn = self.dynamic_VaR(data_train, data_test, alpha, start_test)
         
         return {
             "stats": summary,
@@ -909,10 +1035,8 @@ class Var:
             "qqplot_gaussian": qqplot_gaussian,
             "qqplot_student": qqplot_student,
             "Gaussian vs Student calibrations":fig,
-            "VaR_gev": VaR_gev,
-            "qqplot_gev": qqplot_gev,
             "mrlplot": mrlplot,
             "VaR_gpd": VaR_gpd,
             "qqplot_gpd": qqplot_gpd,
-            "VaR_dyn":VaR_dyn
+            "back_test":res
         }

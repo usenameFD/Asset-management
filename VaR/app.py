@@ -1,6 +1,4 @@
-from datetime import  timedelta
-import datetime
-from datetime import date
+from datetime import datetime,  timedelta, date
 
 from dash.exceptions import PreventUpdate
 from dash import Dash, html, Input, Output, callback, dcc, State, dash_table, dash
@@ -46,7 +44,7 @@ app.layout = html.Div(
 # Initialize the Var class
 ticker = "^FCHI"
 start_date = "2000-01-01"
-end_date = pd.Timestamp(datetime.date.today())
+end_date = pd.Timestamp(date.today())
 var_calculator = Var(ticker, start_date, end_date)
 var_calculator.load_data() # Load data
 
@@ -100,7 +98,8 @@ def update_summary_table(n_clicks, start_train, start_test, end_test, alpha):
      Output("density-comparison", "figure"),
      Output("mrlplot", "figure"),
      Output("qqplot-gev", "figure"),
-     Output("qqplot-gpd", "figure")],
+     Output("qqplot-gpd", "figure"),
+      Output("qqplot-gumbel", "figure")],
     [Input("run-analysis", "n_clicks")],
     [State("start-train", "date"),
      State("start-test", "date"),
@@ -175,7 +174,70 @@ def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
     {"method": "GPD", "var": np.round(VaR_gpd,4), "es": "N/A"}  # ES not calculated for GPD 
     ]
     
-    return var_results, qqplot_gaussian, qqplot_student, density_comparison, mrlplot, qqplot_gev, qqplot_gpd
+    return var_results, qqplot_gaussian, qqplot_student, density_comparison, mrlplot, qqplot_gev, qqplot_gpd, qqplot_gumbel
+
+
+@app.callback(
+    [Output("backtest-results-table", "data"),
+     Output("backtest-results-table", "columns"),
+     Output("backtest-message", "children")],
+    [Input("run-backtest", "n_clicks")],
+    [State("start-train", "date"),
+     State("start-test", "date"),
+     State("end-test", "date"),
+     State("backtest-date", "date"),
+     State("alpha", "value")]
+)
+def run_backtest(n_clicks, start_train, start_test, end_test, backtest_date, alpha):
+    if n_clicks is None or n_clicks <= 0:
+        raise PreventUpdate
+
+    # Convert date inputs
+    start_train = datetime.strptime(start_train, "%Y-%m-%d").date()
+    start_test = datetime.strptime(start_test, "%Y-%m-%d").date()
+    end_test = datetime.strptime(end_test, "%Y-%m-%d").date()
+    backtest_date = datetime.strptime(backtest_date, "%Y-%m-%d").date()
+
+    # Validate backtest date range
+    if not (start_test + timedelta(days=30) <= backtest_date <= date.today()):
+        return [], [], "ℹ️ Please select a backtest date within the valid range."
+
+    # Train/Test split
+    data_train, _ = var_calculator.train_test_split(start_train, start_test, end_test)
+    data_test = var_calculator.data.loc[start_test:]
+
+    # Run Backtesting
+    res = var_calculator.adaptive_backtesting(data_train, data_test.loc[:backtest_date], window_size=30, max_no_exce=252, alpha=alpha)
+    
+
+    result_dict = {
+        "Days since last recalibration": [float(val) for val in res[2]],  # Convert np.float64 to float
+        "Recalibrated VaR": np.round(res[0],4),  # Date strings
+        "Recalibration date": res[1],  # Integers
+    }
+    
+    # Check if backtest_date is a recalibration date
+    recalibration_dates_set = set(res[1])  # Convert to set for quick lookup
+    if backtest_date.strftime("%Y-%m-%d") in recalibration_dates_set:
+        recalibrate_message = f"⚠️ Recalibration occurs on {backtest_date}."
+    else:
+        recalibrate_message = f"✅ No recalibration needed on {backtest_date}."
+
+    table_data = [
+        {"Days since last recalibration": days, "Recalibrated VaR": var, "Recalibration date": date}
+        for days, var, date in zip(result_dict["Days since last recalibration"], 
+                                   result_dict["Recalibrated VaR"], 
+                                   result_dict["Recalibration date"])
+    ]
+
+    table_columns = [
+        {"name": "Days since last recalibration", "id": "Days since last recalibration"},
+        {"name": "Recalibrated VaR", "id": "Recalibrated VaR"},
+        {"name": "Recalibration date", "id": "Recalibration date"},
+    ]
+
+    return table_data, table_columns, recalibrate_message
+
 
 
 # Callback to run VaR Dynamique
