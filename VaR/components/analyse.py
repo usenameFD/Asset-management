@@ -38,12 +38,34 @@ class Analyse:
                         dbc.Card(
                             dbc.CardBody([
                                 html.H5("VaR and ES Parameters", style={"marginBottom": "10px"}),
+
+                                # Ticker Selection Dropdown
+                                dbc.Row([
+                                    dbc.Col([
+                                        html.Label("Select Ticker:", style={"fontWeight": "bold"}),
+                                        dcc.Dropdown(
+                                            id="ticker-dropdown",
+                                            options=[
+                                                {"label": "CAC40", "value": "^FCHI"},
+                                                {"label": "EUROSTOCK", "value": "^STOXX50E"},
+                                                {"label": "SP500", "value": "^GSPC"},
+                                                {"label": "NASDAQ", "value": "^IXIC"},
+                                                {"label": "DXY", "value": "DX-Y.NYB"},
+                                                {"label": "AAPL", "value": "AAPL"},
+                                                {"label": "GOOG", "value": "GOOG"},
+                                                # Add more tickers here
+                                            ],
+                                            value="^FCHI",  # Default value
+                                            style={"width": "100%"}
+                                        ),
+                                    ], width=12),
+                                ], style={"marginBottom": "20px"}),
                                 dbc.Row([
                                     dbc.Col([
                                         html.Label("Start Train Date:", style={"fontWeight": "bold"}),
                                         dcc.DatePickerSingle(
                                             id="start-train",
-                                            min_date_allowed=date(2010, 1, 1),
+                                            min_date_allowed=date(2000, 1, 1),
                                             max_date_allowed=date.today(),
                                             initial_visible_month=date(2008, 10, 15),
                                             date=date(2008, 10, 15),
@@ -53,7 +75,7 @@ class Analyse:
                                         html.Label("Start Test Date:", style={"fontWeight": "bold"}),
                                         dcc.DatePickerSingle(
                                             id="start-test",
-                                            min_date_allowed=date(2010, 1, 1),
+                                            min_date_allowed=date(2001, 1, 1),
                                             max_date_allowed=date.today(),
                                             initial_visible_month=date(2022, 7, 26),
                                             date=date(2022, 7, 26),
@@ -65,7 +87,7 @@ class Analyse:
                                         html.Label("End Test Date:", style={"fontWeight": "bold"}),
                                         dcc.DatePickerSingle(
                                             id="end-test",
-                                            min_date_allowed=date(2010, 1, 1),
+                                            min_date_allowed=date(2001, 1, 1),
                                             max_date_allowed=date.today(),
                                             initial_visible_month=date(2024, 6, 11),
                                             date=date(2024, 6, 11),
@@ -123,7 +145,6 @@ class Analyse:
                                     ], width=12),
                                 ]),
                             ]),
-                            ##########################################
                             dcc.Tab(label='Back Tresting', children=[
                                 dbc.Row([
                                     dbc.Col([
@@ -158,7 +179,6 @@ class Analyse:
                                     ], width=12),
                                 ]),
                             ]),
-                            ###################################################
                             dcc.Tab(label='Plots', children=[
                                 dbc.Row([
                                     dbc.Col([dcc.Graph(id="qqplot-gaussian")], width=6),
@@ -174,7 +194,6 @@ class Analyse:
                                     dbc.Col([dcc.Graph(id="qqplot-gumbel")], width=6),
                                 ]),
                             ]),
-                            ##################################################
                         ]),
                     ], width=9),
                 ]),

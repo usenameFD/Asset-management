@@ -37,31 +37,48 @@ app.layout = html.Div(
         analyse.render(),  # Render the Analyse component
         html.Button(id='load-data-button', style={"display": "none"}),
         dcc.Store(id='selected-item', data='', storage_type='session'),
+        dcc.Store(id='cached-data', data={}),  # Store for cached data
         html.Div(id="hidden-div", style={"display": "none"}),
     ]
 )
-# Initialisation de VaR
-# Initialize the Var class
-ticker = "^FCHI"
-start_date = "2000-01-01"
-end_date = pd.Timestamp(date.today())
-var_calculator = Var(ticker, start_date, end_date)
-var_calculator.load_data() # Load data
 
 
-# Callback to run Statistiques descriptives
+
+# cached_data
+cached_data ={}
+
+# Callback to load and cache data when the ticker changes
 @app.callback(
-    Output("summary-table", "data"),
-    Input("run-analysis", "n_clicks"),
-    State("start-train", "date"),
-    State("start-test", "date"),
-    State("end-test", "date"),
-    State("alpha", "value")
+    Output("cached-data", "data"),
+    Input("ticker-dropdown", "value")
 )
-def update_summary_table(n_clicks, start_train, start_test, end_test, alpha):
-    if n_clicks is None or n_clicks <= 0:
-        raise PreventUpdate
+def update_ticker(selected_ticker):
+    # Initialize the Var class and load data for the selected ticker
+    var_calculator = Var(selected_ticker, "2000-01-01", pd.Timestamp(date.today()))
+    var_calculator.load_data()
+    cached_data[selected_ticker] = var_calculator
     
+    # Store the data in dcc.Store
+    return cached_data
+
+
+
+# Define the  to load selected data
+@app.callback(
+    Output("summary-table", "data"),  # Output for the summary table data
+    Input("ticker-dropdown", "value"),  # Input for ticker selection
+    Input("start-train", "date"),      # Input for start train date
+    Input("start-test", "date"),       # Input for start test date
+    Input("end-test", "date"),         # Input for end test date
+    Input("alpha", "value"),           # Input for alpha value
+)
+def update_analysis(ticker, start_train, start_test, end_test, alpha):
+    
+    if not ticker or ticker not in cached_data:
+        raise PreventUpdate  # Skip if no ticker or data is not cached
+    
+    var_calculator = cached_data[ticker]
+
     # Train/Test split
     data_train, data_test = var_calculator.train_test_split(start_train=start_train, start_test=start_test, end_test=end_test)
     
@@ -100,16 +117,22 @@ def update_summary_table(n_clicks, start_train, start_test, end_test, alpha):
      Output("qqplot-gev", "figure"),
      Output("qqplot-gpd", "figure"),
       Output("qqplot-gumbel", "figure")],
-    [Input("run-analysis", "n_clicks")],
+    [Input("ticker-dropdown", "value"),
+    Input("run-analysis", "n_clicks")],
     [State("start-train", "date"),
      State("start-test", "date"),
      State("end-test", "date"),
      State("alpha", "value")]
 )
 
-def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
+def run_var_es_analysis(ticker, n_clicks, start_train, start_test, end_test, alpha):
     if n_clicks is None or n_clicks <= 0:
         raise PreventUpdate
+    
+    if not ticker or ticker not in cached_data:
+        raise PreventUpdate  # Skip if no ticker or data is not cached
+    
+    var_calculator = cached_data[ticker]
     
     # Train/Test split
     data_train, data_test = var_calculator.train_test_split(start_train=start_train, start_test=start_test, end_test=end_test)
@@ -181,25 +204,29 @@ def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
     [Output("backtest-results-table", "data"),
      Output("backtest-results-table", "columns"),
      Output("backtest-message", "children")],
-    [Input("run-backtest", "n_clicks")],
+    [Input("ticker-dropdown", "value"),
+     Input("run-backtest", "n_clicks")],
     [State("start-train", "date"),
      State("start-test", "date"),
      State("end-test", "date"),
      State("backtest-date", "date"),
      State("alpha", "value")]
 )
-def run_backtest(n_clicks, start_train, start_test, end_test, backtest_date, alpha):
+def run_backtest(ticker, n_clicks, start_train, start_test, end_test, backtest_date, alpha):
     if n_clicks is None or n_clicks <= 0:
         raise PreventUpdate
-
+    
+    if not ticker or ticker not in cached_data:
+        raise PreventUpdate  # Skip if no ticker or data is not cached
+    
+    var_calculator = cached_data[ticker]
+    
     # Convert date inputs
-    start_train = datetime.strptime(start_train, "%Y-%m-%d").date()
-    start_test = datetime.strptime(start_test, "%Y-%m-%d").date()
-    end_test = datetime.strptime(end_test, "%Y-%m-%d").date()
-    backtest_date = datetime.strptime(backtest_date, "%Y-%m-%d").date()
+    start_test_ = datetime.strptime(start_test, "%Y-%m-%d").date()
+    backtest_date_ = datetime.strptime(backtest_date, "%Y-%m-%d").date()
 
     # Validate backtest date range
-    if not (start_test + timedelta(days=30) <= backtest_date <= date.today()):
+    if not (start_test_ + timedelta(days=30) <= backtest_date_ <= date.today()):
         return [], [], "ℹ️ Please select a backtest date within the valid range."
 
     # Train/Test split
@@ -207,7 +234,7 @@ def run_backtest(n_clicks, start_train, start_test, end_test, backtest_date, alp
     data_test = var_calculator.data.loc[start_test:]
 
     # Run Backtesting
-    res = var_calculator.adaptive_backtesting(data_train, data_test.loc[:backtest_date], window_size=30, max_no_exce=252, alpha=alpha)
+    res = var_calculator.adaptive_backtesting(data_train, data_test.loc[:backtest_date_], window_size=30, max_no_exce=252, alpha=alpha)
     
 
     result_dict = {
@@ -218,10 +245,10 @@ def run_backtest(n_clicks, start_train, start_test, end_test, backtest_date, alp
     
     # Check if backtest_date is a recalibration date
     recalibration_dates_set = set(res[1])  # Convert to set for quick lookup
-    if backtest_date.strftime("%Y-%m-%d") in recalibration_dates_set:
-        recalibrate_message = f"⚠️ Recalibration occurs on {backtest_date}."
+    if backtest_date_.strftime("%Y-%m-%d") in recalibration_dates_set:
+        recalibrate_message = f"⚠️ Recalibration occurs on {backtest_date_}."
     else:
-        recalibrate_message = f"✅ No recalibration needed on {backtest_date}."
+        recalibrate_message = f"✅ No recalibration needed on {backtest_date_}."
 
     table_data = [
         {"Days since last recalibration": days, "Recalibrated VaR": var, "Recalibration date": date}
@@ -243,15 +270,21 @@ def run_backtest(n_clicks, start_train, start_test, end_test, backtest_date, alp
 # Callback to run VaR Dynamique
 @app.callback(
     [Output("var-dyn-plot", "figure")],
-    [Input("run-analysis", "n_clicks")],
+    [Input("ticker-dropdown", "value"),
+     Input("run-analysis", "n_clicks")],
     [State("start-train", "date"),
      State("start-test", "date"),
      State("end-test", "date"),
      State("alpha", "value")]
 )
-def run_var_dyn_analysis(n_clicks, start_train, start_test, end_test, alpha):
+def run_var_dyn_analysis(ticker, n_clicks, start_train, start_test, end_test, alpha):
     if n_clicks is None or n_clicks <= 0:
         raise PreventUpdate
+    
+    if not ticker or ticker not in cached_data:
+        raise PreventUpdate  # Skip if no ticker or data is not cached
+    
+    var_calculator = cached_data[ticker]
     
     # Train/Test split
     data_train, data_test = var_calculator.train_test_split(start_train=start_train, start_test=start_test, end_test=end_test)
