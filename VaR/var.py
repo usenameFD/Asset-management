@@ -161,7 +161,7 @@ class Var:
         Z = pd.DataFrame(Z, index=data.index, columns=["return"])
         return Z
         
-    def qqplot(self, df_observed, df_simulated):
+    def qqplot(self, df_observed, df_simulated, label):
         """Generate a QQ plot comparing observed and simulated data."""
         quantiles_x = np.percentile(df_observed, np.linspace(0, 100, len(df_observed)))
         quantiles_y = np.percentile(df_simulated, np.linspace(0, 100, len(df_simulated)))
@@ -189,7 +189,7 @@ class Var:
 
         # Customize layout
         fig.update_layout(
-            title='QQ Plot Comparing Quantiles of Observed and Simulated Data',
+            title=f"QQ Plot Comparant l'ajustement des données à une {label} ",
             xaxis_title='Empirical Quantiles',
             yaxis_title='Theoretical Quantiles',
             showlegend=True,
@@ -400,7 +400,7 @@ class Var:
             x=theoretical_quantiles,
             y=empirical_quantiles,
             mode='markers',
-            name='Empirical vs Theoretical',
+            name='Ajustement à une GEV',
             marker=dict(color='blue', size=8)
         ))
 
@@ -573,7 +573,7 @@ class Var:
             x=theoretical_probs,
             y=empirical_probs,
             mode='markers',
-            name='Empirical vs Theoretical',
+            name='Ajustement à une Gumbel',
             marker=dict(color='blue')
         )
 
@@ -830,7 +830,7 @@ class Var:
         res = self.Var_Hist(Z_gaussian[["return"]], alpha)
         VaR_gaussian, ES_gaussian = res["VaR"], res["ES"]
         VaR_gaussian_10_day = np.sqrt(10) * VaR_gaussian  # Corrected 10-day VaR calculation
-        qqplot_gaussian = self.qqplot(data_train["return"].values, Z_gaussian["return"].values)
+        qqplot_gaussian = self.qqplot(data_train["return"].values, Z_gaussian["return"].values, label="Gaussienne")
 
         ## VaR at 10 days horizon 
         S0 = data_train['Close'].iloc[-1]
@@ -848,7 +848,7 @@ class Var:
         Z_student = self.Var_param_student(data_train["return"], alpha)
         res = self.Var_Hist(Z_student[["return"]], alpha)
         VaR_student, ES_student = res["VaR"], res["ES"]
-        qqplot_student = self.qqplot(data_train["return"].values, Z_student["return"].values)
+        qqplot_student = self.qqplot(data_train["return"].values, Z_student["return"].values, label ="Student")
         
         # Comparing Gaussian and Student calibrations
         fig = plt.figure()

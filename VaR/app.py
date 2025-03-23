@@ -1,17 +1,22 @@
 from datetime import  timedelta
 import datetime
+from datetime import date
+
+from dash.exceptions import PreventUpdate
 from dash import Dash, html, Input, Output, callback, dcc, State, dash_table, dash
 import dash_bootstrap_components as dbc
+
 import pandas as pd
 import numpy as np
 import plotly.express as px
-from datetime import date
+import matplotlib as plt
+import seaborn as sns
+
 from var import Var  # Assuming Var is your class for VaR and ES calculations
 from components.analyse import Analyse
 from components.menu import Menu
 
-import matplotlib as plt
-import seaborn as sns
+
 
 # Initialize the Dash app
 FONT_AWESOME = "https://use.fontawesome.com/releases/v5.10.2/css/all.css"
@@ -45,10 +50,27 @@ end_date = pd.Timestamp(datetime.date.today())
 var_calculator = Var(ticker, start_date, end_date)
 var_calculator.load_data() # Load data
 
-# Pour la mise à jour
-def run_var_es_analysis(start_train, start_test, end_test, alpha):
-    
-    # Load data
+
+
+# Callback to run VaR and ES analysis
+@app.callback(
+    [Output("var-results-table", "data"),
+     Output("qqplot-gaussian", "figure"),
+     Output("qqplot-student", "figure"),
+     Output("density-comparison", "figure"),
+     Output("mrlplot", "figure"),
+     Output("qqplot-gev", "figure"),
+     Output("qqplot-gpd", "figure")],
+    [Input("run-analysis", "n_clicks")],
+    [State("start-train", "date"),
+     State("start-test", "date"),
+     State("end-test", "date"),
+     State("alpha", "value")]
+)
+
+def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
+    if n_clicks is None or n_clicks <= 0:
+        raise PreventUpdate
     
     # Train/Test split
     data_train, data_test = var_calculator.train_test_split(start_train=start_train, start_test=start_test, end_test=end_test)
@@ -71,7 +93,7 @@ def run_var_es_analysis(start_train, start_test, end_test, alpha):
     res = var_calculator.Var_Hist(Z_gaussian[["return"]], alpha)
     VaR_gaussian, ES_gaussian = res["VaR"], res["ES"]
     VaR_gaussian_10_day = np.sqrt(10) * VaR_gaussian  # Corrected 10-day VaR calculation
-    qqplot_gaussian = var_calculator.qqplot(data_train["return"].values, Z_gaussian["return"].values)
+    qqplot_gaussian = var_calculator.qqplot(data_train["return"].values, Z_gaussian["return"].values, label="Gaussienne")
 
     ## VaR at 10 days horizon 
     S0 = data_train['Close'].iloc[-1]
@@ -89,7 +111,7 @@ def run_var_es_analysis(start_train, start_test, end_test, alpha):
     Z_student = var_calculator.Var_param_student(data_train["return"], alpha)
     res = var_calculator.Var_Hist(Z_student[["return"]], alpha)
     VaR_student, ES_student = res["VaR"], res["ES"]
-    qqplot_student = var_calculator.qqplot(data_train["return"].values, Z_student["return"].values)
+    qqplot_student = var_calculator.qqplot(data_train["return"].values, Z_student["return"].values, label="Student")
     
     # Comparing Gaussian and Student calibrations
     density_comparison = var_calculator.density_comparison_plot(data_train, Z_gaussian, Z_student)
@@ -119,37 +141,14 @@ def run_var_es_analysis(start_train, start_test, end_test, alpha):
     #VaR_dyn = var_calculator.dynamic_VaR(data_train, data_test, alpha, start_test)
     
     var_results = [
-    {"method": "Historical", "var": VaR_hist, "es": ES_hist},
-    {"method": "Gaussian", "var": VaR_gaussian, "es": ES_gaussian},
-    {"method": "Student", "var": VaR_student, "es": ES_student},
-    {"method": "GEV", "var": VaR_gev, "es": "N/A"},  # ES not calculated for GEV
-    {"method": "GPD", "var": VaR_gpd, "es": "N/A"}  # ES not calculated for GPD
+    {"method": "Historical", "var": np.round(VaR_hist,4), "es": np.round(ES_hist,4)},
+    {"method": "Gaussian", "var": np.round(VaR_gaussian,4), "es": np.round(ES_gaussian,4)},
+    {"method": "Student", "var": np.round(VaR_student,4), "es": np.round(ES_student,4)},
+    {"method": "GEV", "var": np.round(VaR_gev,4), "es": "N/A"},  # ES not calculated for GEV
+    {"method": "GPD", "var": np.round(VaR_gpd,4), "es": "N/A"}  # ES not calculated for GPD
     ]
     
     return var_results, qqplot_gaussian, qqplot_student, density_comparison, mrlplot, qqplot_gev, qqplot_gpd
-
-# Callback to run VaR and ES analysis
-@app.callback(
-    [Output("var-results-table", "data"),
-     Output("qqplot-gaussian", "figure"),
-     Output("qqplot-student", "figure"),
-     Output("density-comparison", "figure"),
-     Output("mrlplot", "figure"),
-     Output("qqplot-gev", "figure"),
-     Output("qqplot-gpd", "figure")],
-    [Input("run-analysis", "n_clicks")],
-    [State("start-train", "date"),
-     State("start-test", "date"),
-     State("end-test", "date"),
-     State("alpha", "value")]
-)
-def update_run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
-    if n_clicks is None or n_clicks <= 0:
-        return run_var_es_analysis(start_train = "2008-10-15",
-                                   start_test = "2022-07-26",
-                                   end_test = "2024-06-11", alpha = 0.99)
-
-    return run_var_es_analysis(start_train, start_test, end_test, alpha)
 
 # Run the app
 if __name__ == '__main__':

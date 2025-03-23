@@ -74,7 +74,7 @@ class Analyse:
                                     ], width=6),
                                     dbc.Col([
                                         html.Label("Alpha:", style={"fontWeight": "bold"}),
-                                        dbc.Input(id="alpha", type="number", value=0.05, min=0.01, max=0.99, step=0.01),
+                                        dbc.Input(id="alpha", type="number", value=0.99, min=0.01, max=0.99999, step=0.01),
                                     ], width=6),
                                 ]),
                                 html.Br(),
