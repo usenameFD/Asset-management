@@ -51,6 +51,46 @@ var_calculator = Var(ticker, start_date, end_date)
 var_calculator.load_data() # Load data
 
 
+# Callback to run Statistiques descriptives
+@app.callback(
+    Output("summary-table", "data"),
+    Input("run-analysis", "n_clicks"),
+    State("start-train", "date"),
+    State("start-test", "date"),
+    State("end-test", "date"),
+    State("alpha", "value")
+)
+def update_summary_table(n_clicks, start_train, start_test, end_test, alpha):
+    if n_clicks is None or n_clicks <= 0:
+        raise PreventUpdate
+    
+    # Train/Test split
+    data_train, data_test = var_calculator.train_test_split(start_train=start_train, start_test=start_test, end_test=end_test)
+    
+    # Compute summary statistics
+    summary_stats = {
+        "Statistic": ["Mean", "Std Dev", "Min", "Max", "25%", "50%", "75%", "skewness", "Kurtosis"],
+        "Train Set": [
+            np.round(data_train["return"].mean(),4), np.round(data_train["return"].std(),4),
+            np.round(data_train["return"].min(),4), np.round(data_train["return"].max(),4),
+            np.round(data_train["return"].quantile(0.25),4), np.round(data_train["return"].median(),4),
+            np.round(data_train["return"].quantile(0.75),4),
+            np.round(data_train["return"].skew(),4), np.round(3 + data_train["return"].kurtosis(),4)
+        ],
+        "Test Set": [
+            np.round(data_test["return"].mean(),4), np.round(data_test["return"].std(),4),
+            np.round(data_test["return"].min(),4), np.round(data_test["return"].max(),4),
+            np.round(data_test["return"].quantile(0.25),4), np.round(data_test["return"].median(),4),
+            np.round(data_test["return"].quantile(0.75),4),
+            np.round(data_test["return"].skew(),4), np.round(3 + data_test["return"].kurtosis(),4)
+        ]
+    }
+
+    summary_table_data = pd.DataFrame(summary_stats).to_dict("records")
+
+    return summary_table_data
+
+
 
 # Callback to run VaR and ES analysis
 @app.callback(
@@ -74,9 +114,6 @@ def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
     
     # Train/Test split
     data_train, data_test = var_calculator.train_test_split(start_train=start_train, start_test=start_test, end_test=end_test)
-    
-    # Stats
-    summary = {"Train set ":data_train.describe(), "Test set":data_test.describe()}
     
     # Historical VaR and ES
     res = var_calculator.Var_Hist(data_train[["return"]], alpha)
@@ -118,7 +155,6 @@ def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
 
     
     # VaR GEV
-    
     block_size = 20  # Taille de bloc (max mensuel)
     block_max = var_calculator.block_maxima(-data_train["return"].to_numpy(), block_size)
 
@@ -136,19 +172,39 @@ def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
     shape, loc, scale =var_calculator.fit_gpd(-data_train["return"].to_numpy(), u)
     VaR_gpd = - var_calculator.var_tve_pot(-data_train["return"].to_numpy(), u, shape, scale, alpha)
     qqplot_gpd = var_calculator.gpd_validation(-data_train["return"].to_numpy(), u, shape, scale)
-
-    # VaR dynamique
-    #VaR_dyn = var_calculator.dynamic_VaR(data_train, data_test, alpha, start_test)
     
     var_results = [
     {"method": "Historical", "var": np.round(VaR_hist,4), "es": np.round(ES_hist,4)},
-    {"method": "Gaussian", "var": np.round(VaR_gaussian,4), "es": np.round(ES_gaussian,4)},
+    {"method": "Bootstrap", "var": np.round(VaR_bootstrap,4), "es": "N/A"},
     {"method": "Student", "var": np.round(VaR_student,4), "es": np.round(ES_student,4)},
+    {"method": "Gaussian", "var": np.round(VaR_gaussian,4), "es": np.round(ES_gaussian,4)},
+    {"method": "10-day Gaussian Diffusion", "var": np.round(VaR_gaussian_10_day_diff,4), "es": "N/A"},
     {"method": "GEV", "var": np.round(VaR_gev,4), "es": "N/A"},  # ES not calculated for GEV
-    {"method": "GPD", "var": np.round(VaR_gpd,4), "es": "N/A"}  # ES not calculated for GPD
+    {"method": "GPD", "var": np.round(VaR_gpd,4), "es": "N/A"}  # ES not calculated for GPD 
     ]
     
     return var_results, qqplot_gaussian, qqplot_student, density_comparison, mrlplot, qqplot_gev, qqplot_gpd
+
+
+# Callback to run VaR Dynamique
+@app.callback(
+    [Output("var-dyn-plot", "figure")],
+    [Input("run-analysis", "n_clicks")],
+    [State("start-train", "date"),
+     State("start-test", "date"),
+     State("end-test", "date"),
+     State("alpha", "value")]
+)
+def run_var_dyn_analysis(n_clicks, start_train, start_test, end_test, alpha):
+    if n_clicks is None or n_clicks <= 0:
+        raise PreventUpdate
+    
+    # Train/Test split
+    data_train, data_test = var_calculator.train_test_split(start_train=start_train, start_test=start_test, end_test=end_test)
+    
+    # VaR dynamique
+    VaR_dyn = var_calculator.dynamic_VaR(data_train, data_test, alpha, start_test)
+    return [VaR_dyn]
 
 # Run the app
 if __name__ == '__main__':

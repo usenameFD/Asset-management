@@ -79,6 +79,15 @@ class Analyse:
                                 ]),
                                 html.Br(),
                                 dbc.Button("Run Analysis", id="run-analysis", color="primary", className="w-100"),
+                                html.Br(), html.Br(),
+                                html.H5("Summary Statistics", style={"marginBottom": "10px"}),
+                                dash_table.DataTable(
+                                    id="summary-table",
+                                    columns=[{"name": col, "id": col} for col in ["Statistic", "Train Set", "Test Set"]],
+                                    style_table={"overflowX": "auto"},
+                                    style_header={"fontWeight": "bold", "backgroundColor": "lightgrey"},
+                                    style_data={"whiteSpace": "normal", "height": "auto"},
+                                ),
                             ])
                         ),
                     ], width=3),
@@ -101,6 +110,16 @@ class Analyse:
                                             style_header={"fontWeight": "bold", "backgroundColor": "#f4f4f4"},
                                             filter_action="native", filter_options={"placeholder_text": "Filter..."},
                                             page_size=10,
+                                        ),
+                                    ], width=12),
+                                ]),
+                                html.Br(),
+                                dbc.Row([
+                                    dbc.Col([
+                                        html.H5("Dynamic VaR Plot", style={"textAlign": "center"}),
+                                        dcc.Graph(
+                                            id="var-dyn-plot", 
+                                            style={"height": "400px"}
                                         ),
                                     ], width=12),
                                 ]),
