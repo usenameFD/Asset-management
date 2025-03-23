@@ -130,13 +130,13 @@ class Var:
             #print(Z)
 
             # Calculer les prix simulés à chaque étape
-        for j in range(1, t):
+            for j in range(1, t):
 
-            St[i, j] = St[i, j-1] * np.exp((mu - 0.5 * sigma**2) + sigma * np.sqrt(1) * Z[j-1])
+                St[i, j] = St[i, j-1] * np.exp((mu - 0.5 * sigma**2) + sigma * np.sqrt(1) * Z[j-1])
 
         return St
 
-        ## ii - On calcule les log rendements à horizon 10 jours pour chacune des trajectoires
+    ## ii - On calcule les log rendements à horizon 10 jours pour chacune des trajectoires
 
     def calculate_log_returns(self, St, S0):
         # Calculer les log returns
@@ -149,6 +149,19 @@ class Var:
     def calculate_var(self, log_returns, confidence_level=0.99):
         # Calculer le quantile d'ordre (1 - percentile) de la distribution des pertes
         var = np.percentile(log_returns, 100 * (1 - confidence_level))
+        return var
+    
+    def calculate_var_diffusion(self, data_train, horizon = 10, alpha=0.99, num_simulations = 10_00):
+        S0 = data_train['Close'].iloc[-1]
+        mu = np.mean(data_train['return'])
+        sigma = np.std(data_train['return'])
+        St = self.simulate_price_paths(horizon+1, S0, mu, sigma, num_simulations)
+        
+        # Calcul des rendements log
+        log_returns = self.calculate_log_returns(St, S0)
+        log_returns = pd.DataFrame(log_returns, columns=["return"])
+        var = self.Var_Hist(log_returns, alpha)
+        
         return var
 
     ## Protocole de backtesting

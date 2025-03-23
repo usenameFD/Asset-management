@@ -133,16 +133,7 @@ def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
     qqplot_gaussian = var_calculator.qqplot(data_train["return"].values, Z_gaussian["return"].values, label="Gaussienne")
 
     ## VaR at 10 days horizon 
-    S0 = data_train['Close'].iloc[-1]
-    mu = np.mean(data_train['return'])
-    sigma = np.std(data_train['return'])
-    t = 11
-    num_simulations = 1000
-    St = var_calculator.simulate_price_paths(t, S0, mu, sigma, num_simulations)
-    # Calcul des rendements log
-    log_returns = var_calculator.calculate_log_returns(St, S0)
-    # Calcul de la VaR à 99%
-    VaR_gaussian_10_day_diff = var_calculator.calculate_var(log_returns)
+    VaR_10day_diff = var_calculator.calculate_var_diffusion(data_train, horizon = 10, alpha=alpha)
     
     # Student parametric VaR and ES
     Z_student = var_calculator.Var_param_student(data_train["return"], alpha)
@@ -178,7 +169,8 @@ def run_var_es_analysis(n_clicks, start_train, start_test, end_test, alpha):
     {"method": "Bootstrap", "var": np.round(VaR_bootstrap,4), "es": "N/A"},
     {"method": "Student", "var": np.round(VaR_student,4), "es": np.round(ES_student,4)},
     {"method": "Gaussian", "var": np.round(VaR_gaussian,4), "es": np.round(ES_gaussian,4)},
-    {"method": "10-day Gaussian Diffusion", "var": np.round(VaR_gaussian_10_day_diff,4), "es": "N/A"},
+    {"method": "10-day Gaussian", "var": np.round(VaR_gaussian_10_day,4), "es": np.round(np.sqrt(10)*ES_gaussian,4)},
+    {"method": "10-day Gaussian Diffusion", "var": np.round(VaR_10day_diff["VaR"],4), "es": np.round(VaR_10day_diff["ES"],4)},
     {"method": "GEV", "var": np.round(VaR_gev,4), "es": "N/A"},  # ES not calculated for GEV
     {"method": "GPD", "var": np.round(VaR_gpd,4), "es": "N/A"}  # ES not calculated for GPD 
     ]
